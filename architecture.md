@@ -6,7 +6,7 @@ Render-specific limits and SDK settings below were checked against the current R
 
 ## 1. System overview
 
-Three deployables, two folders of code, one repo:
+Three deployables, two folders of code, one repo. The request and event flow is:
 
 | Deployable | Folder | Render type | Start command |
 |---|---|---|---|
@@ -16,31 +16,35 @@ Three deployables, two folders of code, one repo:
 
 The API and the workflow service use the **same root directory** (`backend/`), so they share one Python codebase, one `requirements.txt`, the same Pydantic models and the same `cringe/` module.
 
-```
-                       Browser
-                         |  GET /  (static UI)               ^ GET /api/runs/:id  (poll ~1s)
-                         v                                   |
-              +-----------------------+   fetch (CORS)  +--------------------------------------+
-              | Render WEB: frontend/ |---------------->| Render WEB: backend/app  (FastAPI)   |
-              | Next.js, TypeScript   |                 |  - in-memory RunStore                |
-              +-----------------------+                 |  - POST /api/runs -> start_task()    |
-                                                        |  - POST /internal/runs/:id/events    |
-                                                        |  - POST /internal/runs/:id/demo-fail |
-                                                        |  - abuse guard (limits, busy 429)    |
-                                                        +--------------------------------------+
-                                                           | start_task (Render Python SDK)   ^ events
-                                                           v                                  | (HTTPS POST, Bearer)
-                                                        +--------------------------------------+
-                                                        | Render WORKFLOW: backend/workflows   |
-                                                        |  run_pipeline (root)                 |
-                                                        |   +-- write_variant_batch  x N (Claude)
-                                                        |   +-- run_commenter_batch  x M (Claude)      
-                                                        |   +-- translate_reality        (Claude)
-                                                        |  run_tone_down (root)        (Claude)|
-                                                        +--------------------------------------+
-                                                                |                  |
-                                                                v                  v
-                                                                Anthropic API
+```text
+ Browser
+    |
+    | POST /api/runs, GET /api/runs/{id} every 1 second
+    v
++---+------------------+       start_task        +--------------------------+
+| Next.js frontend     | ----------------------> | FastAPI API              |
+| Generate + Check     |                         | RunStore + abuse guard  |
++----------------------+ <---------------------- | internal event endpoint |
+          ^                  RunState            +------------+-------------+
+          |                                               |
+          |                                               | Render SDK
+          |                                               v
+          |                                  +------------+-------------+
+          |                                  | Render Workflow service |
+          |                                  |                         |
+          |                                  | run_pipeline            |
+          |                                  |  - write variants       |
+          |                                  |  - select finalists     |
+          |                                  |  - run commenters       |
+          |                                  |  - rank and translate   |
+          |                                  | run_tone_down           |
+          |                                  +------------+-------------+
+          |                                               |
+          |                         events over HTTPS     | Claude calls
+          +-----------------------------------------------v
+                                                   +-------+-------+
+                                                   | Anthropic API |
+                                                   +---------------+
 ```
 
 ### Why events are pushed to the API
@@ -90,7 +94,8 @@ The template for both apps already exists on `main`. Files marked *(template)* e
     cringe/                   # Ishan (I3)  features(), score()  (stub created by M1)
     scripts/consistency.py    # Ishan (I7)
     tests/
-  frontend/                   # Next.js App Router, TypeScript, Tailwind  (template)
+  frontend/                   # Next.js App Router, TypeScript, Tailwind
+    .env.example              # public build-time settings
     app/layout.tsx  app/page.tsx  lib/api.ts                                (template)
     app/page.tsx              # Mahir (M6)  Generate page (replaces the template page)
     app/check/page.tsx        # Ishan (I6)  Check page
@@ -229,7 +234,7 @@ type ApiError = { error: string; code: "busy" | "invalid_input" | "render_unavai
 
 ## 4. HTTP API (FastAPI, `backend/app/`)
 
-CORS allows only the origins in `CORS_ORIGINS` (the frontend URL). Errors use the `ApiError` shape with a matching HTTP status (400 invalid input, 404 not found, 429 busy, 502 Render unavailable).
+CORS allows only the origins in `CORS_ORIGINS` (the frontend URL). Errors use the `ApiError` shape with a matching HTTP status (400 invalid input, 404 not found, 429 busy, 502 Render unavailable). FastAPI request-validation errors are normalized to the same 400 `invalid_input` response.
 
 | Method and path | Caller | Behaviour |
 |---|---|---|
@@ -237,10 +242,10 @@ CORS allows only the origins in `CORS_ORIGINS` (the frontend URL). Errors use th
 | `POST /api/runs` | browser | Validates `RunRequest` (length limits, section 9). Runs the abuse guard (section 10). Creates `run_id` (uuid4), `RunState` with status `queued`. Calls `RenderAsync().workflows.start_task("<workflow-slug>/run_pipeline", [{run_id, mode, text, demo_fail}])`, stores `task_run_id`, starts the watcher. Returns `{run_id}`. If Render throws, mark the run failed and return 502 `render_unavailable`. |
 | `GET /api/runs/{id}` | browser | Returns the full `RunState`. 404 for unknown ids. The browser polls about every 1000 ms until `status` is `completed` or `failed`, with a hard stop at 120 s. |
 | `POST /api/runs/{id}/tone-down` | browser | Check mode only. Starts `run_tone_down` for the draft. The result arrives as `rewrite_ready`; a failed retry arrives as `rewrite_failed` while the original Check run stays completed. |
-| `POST /internal/runs/{id}/events` | workflow tasks only | Requires `Authorization: Bearer ${WORKFLOW_EVENT_SECRET}` (constant-time compare). Body is one `RunEvent` without `seq`. Applies it to the run if the `event_id` has not been seen. Returns `{ok: true, duplicate: bool}`. |
+| `POST /internal/runs/{id}/events` | workflow tasks only | Requires `Authorization: Bearer ${WORKFLOW_EVENT_SECRET}` (constant-time compare). Body is one `RunEvent` without `seq`. The API validates the payload for the event type before applying it, then ignores repeated `event_id` values. Returns `{ok: true, duplicate: bool}`. |
 | `POST /internal/runs/{id}/demo-fail-claim` | workflow tasks only | Same auth. Atomically returns `{fail: true}` the **first** time it is called for a run with `demo_fail` set, otherwise `{fail: false}`. Used by the failure switch (section 6). |
 
-`RunStore` is a dict guarded by an `asyncio.Lock`. Runs expire after 1 hour. The API **must run as one instance with one worker** (`--workers 1`, one Render instance) because state is in memory.
+`RunStore` is a dict guarded by an `asyncio.Lock`. Run creation reserves an active slot atomically, and runs expire after 1 hour even when an expired id is read. The API **must run as one instance with one worker** (`--workers 1`, one Render instance) because state is in memory.
 
 Render SDK usage (Python, confirmed in the SDK source): `from render import RenderAsync`; `await RenderAsync().workflows.start_task(task_slug, input_data)` returns an awaitable run, and awaiting it raises on failure. `task_slug` is `{workflow-slug}/{task-name}`; `input_data` is a list of positional arguments. `RENDER_API_KEY` is read from the environment. The SDK is already in `requirements.txt`.
 
@@ -279,8 +284,8 @@ Do this first (M1, then M8): time one trivial chained run to measure startup lat
 2. generate mode: `asyncio.gather` over `VARIANT_BATCHES` calls to `ctx.run(write_variant_batch, ...)`. Merge into 20 `Variant`s. Post `variants_ready`.
    check mode: build the single `Variant(post_id="draft", voice_id="user", text=req.text)`.
 3. generate mode: `filter_top3(variants)` (a plain function, not a task). Post `finalists_selected`.
-4. `post_event(stage: commenting)`. For each finalist, `asyncio.gather` over `COMMENTER_BATCHES_PER_POST` calls to `ctx.run(run_commenter_batch, ...)`. Each batch posts one `comment` event per persona as it completes.
-5. When all batches for a finalist return: compute `cringe.score(...)` and the `PostScore`, post `cringe_scored`.
+4. `post_event(stage: commenting)`. For all finalists, `asyncio.gather` over each finalist's `COMMENTER_BATCHES_PER_POST` calls to `ctx.run(run_commenter_batch, ...)`. Each batch posts one `comment` event per persona as it completes. The shared LLM semaphore still limits Anthropic concurrency.
+5. When a finalist's batches return: compute `cringe.score(...)` and the `PostScore`, post `cringe_scored`.
 6. `post_event(stage: ranking)`. Compute ranking, post `ranking_ready`.
 7. generate mode: `ctx.run(translate_reality, ...)` for the top-ranked post, post `reality_ready`.
 8. Post `run_completed`. On any unrecovered exception post `run_failed` and re-raise.
@@ -299,7 +304,7 @@ The last two arguments carry the demo switch; keep the `maybe_fail(...)` call as
 One Claude call returning `{translation, inflations}` JSON. Returns `Reality`.
 
 **`run_tone_down(ctx, request)`** (Ishan I4)
-Root task for check mode; the API passes `{run_id, draft, cringe_result}` as the single Render task argument. One Claude call that rewrites the draft to remove the triggered features while keeping the facts. Re-score the rewrite with the rule part only (fast, repeatable). Post `rewrite_ready`.
+Root task for check mode; the API passes `{run_id, draft, cringe_result}` as the single Render task argument. It makes up to two Claude attempts, rejects malformed or fact-changing rewrites, and requires a lower rule-only score. It posts `rewrite_ready` on success or `rewrite_failed` after the second failure; a rewrite failure does not fail the completed Check run.
 
 ## 6. Retry and the demo failure switch
 
@@ -478,7 +483,7 @@ Rules: secrets live only in Render environment settings and local `.env` files. 
 - Python: `logging` at INFO with `run_id` in every line. Never log full model outputs or post text at INFO, only counts and ids.
 - API: log each internal endpoint call with `run_id` and event `type`.
 - Every model call has a timeout (20 s) and one retry for transient errors.
-- UI states for: queued, running (with a stage label), failed (message and a "Try again" button), busy (429 message), and a 120 s overall timeout.
+- UI states for: queued, running (with a stage label), completed, invalid input, backend unavailable, failed (message and a "Try again" button), busy (429 message), and a 120 s overall timeout. Tone down has its own pending, success, failure, and retry states while preserving the completed Check result.
 - Stretch (I9): PostHog events `run_started`, `run_completed`, `reality_toggled`, `tone_changed`, `draft_checked`. Sentry in both services. Scrub post text from Sentry payloads.
 
 ## 16. Risks and mitigations
