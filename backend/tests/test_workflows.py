@@ -1,19 +1,82 @@
+"""Workflow task tests.
+
+Tasks are exercised by calling their bodies directly (`task.func`) with a fake context,
+so none of this needs Render or a model key.
+"""
+
 import httpx
 import pytest
 
+from workflows.data import chunk
+from workflows.demo_fail import SimulatedFailure, designated_batch_id
 from workflows.events import claim_demo_fail, make_event_id, post_event
+from workflows.llm.anthropic_client import LLMError, extract_json
 from workflows.main import app
-from workflows.tasks.pipeline import run_pipeline
+from workflows.tasks.commenters import run_commenter_batch
+from workflows.tasks.pipeline import run_pipeline, write_variant_batch
+from workflows.tasks.reality import translate_reality
 
 
-def test_tasks_are_registered_with_retry():
-    assert run_pipeline.name == "run_pipeline"
-    assert "run_pipeline" in app._registry.get_task_names()
+class FakeCtx:
+    """Runs child tasks in-process instead of on Render."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def run(self, task, *args, **kwargs):
+        self.calls.append(task.name)
+        return await task.func(self, *args, **kwargs)
+
+
+@pytest.fixture
+def events(monkeypatch):
+    """Capture every event the tasks post, from all three task modules."""
+    captured: list[tuple[str, str]] = []
+
+    async def fake_post_event(run_id, event_type, payload=None, **_):
+        captured.append((event_type, payload or {}))
+
+    for module in ("pipeline", "commenters", "reality"):
+        monkeypatch.setattr(f"workflows.tasks.{module}.post_event", fake_post_event, raising=False)
+    monkeypatch.setattr("workflows.demo_fail.post_event", fake_post_event)
+    return captured
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    """A model that always returns a clean, guardrail-safe post."""
+
+    async def fake_call_json(*, system, user, schema=None, max_tokens=1024, model=None):
+        if "original" in user:  # the reality translation prompt
+            return {"translation": "It was a coffee.", "inflations": ["a mindset"]}
+        return {"post": "i got a coffee and went to a meeting.\n\nthat is the whole story."}
+
+    monkeypatch.setattr("workflows.tasks.pipeline.call_json", fake_call_json)
+    monkeypatch.setattr("workflows.tasks.reality.call_json", fake_call_json)
+
+
+def test_tasks_are_registered():
+    names = app._registry.get_task_names()
+    for task in ("run_pipeline", "write_variant_batch", "run_commenter_batch", "translate_reality"):
+        assert task in names
 
 
 def test_event_ids_are_deterministic():
     assert make_event_id("r1", "stage", "variants") == "r1:stage:variants"
     assert make_event_id("r1", "run_started") == "r1:run_started"
+
+
+def test_chunk_splits_evenly_and_never_returns_empty():
+    assert chunk(list(range(50)), 2) == [list(range(25)), list(range(25, 50))]
+    assert chunk([], 4) == [[]]
+    assert chunk([1], 4) == [[1]]
+
+
+def test_extract_json_tolerates_fences_and_prose():
+    assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert extract_json('Sure! {"a": 2} hope that helps') == {"a": 2}
+    with pytest.raises(LLMError):
+        extract_json("no json here")
 
 
 def recording_client(responses: dict[str, dict]):
@@ -27,7 +90,6 @@ def recording_client(responses: dict[str, dict]):
     return httpx.AsyncClient(transport=httpx.MockTransport(handler)), calls
 
 
-@pytest.mark.asyncio
 async def test_post_event_sends_auth_and_idempotency_key():
     client, calls = recording_client({})
     await post_event("r1", "stage", {"stage": "variants"}, key="variants", client=client)
@@ -37,7 +99,6 @@ async def test_post_event_sends_auth_and_idempotency_key():
     assert b'"event_id":"r1:stage:variants"' in req.content.replace(b" ", b"")
 
 
-@pytest.mark.asyncio
 async def test_claim_demo_fail_reads_the_api_answer():
     client, _ = recording_client({"demo-fail-claim": {"fail": True}})
     assert await claim_demo_fail("r1", client=client) is True
@@ -45,29 +106,99 @@ async def test_claim_demo_fail_reads_the_api_answer():
     assert await claim_demo_fail("r1", client=client2) is False
 
 
-@pytest.mark.asyncio
-async def test_run_pipeline_round_trip_posts_started_then_completed(monkeypatch):
-    sent: list[tuple[str, str]] = []
+async def test_write_variant_batch_returns_one_variant_per_voice(fake_llm):
+    assignments = [
+        {"post_id": "v01", "voice": {"id": "humblebrag", "label": "Humblebrag", "instruction": "x"}},
+        {"post_id": "v02", "voice": {"id": "hot_take", "label": "Hot take", "instruction": "y"}},
+    ]
+    out = await write_variant_batch.func(FakeCtx(), "r1", "i got a coffee and went to a meeting.", assignments)
+    assert [v["post_id"] for v in out] == ["v01", "v02"]
+    assert out[0]["voice_id"] == "humblebrag"
 
-    async def fake_post_event(run_id, event_type, payload=None, **_):
-        sent.append((run_id, event_type))
 
-    monkeypatch.setattr("workflows.tasks.pipeline.post_event", fake_post_event)
-    out = await run_pipeline.func(None, {"run_id": "r1", "mode": "generate", "text": "hi", "demo_fail": False})
+async def test_write_variant_batch_drops_a_variant_that_invents_facts(monkeypatch):
+    async def inventing(*, system, user, schema=None, max_tokens=1024, model=None):
+        return {"post": "I joined Microsoft and raised 40 million dollars."}
+
+    monkeypatch.setattr("workflows.tasks.pipeline.call_json", inventing)
+    assignments = [{"post_id": "v01", "voice": {"id": "v", "label": "V", "instruction": "x"}}]
+    assert await write_variant_batch.func(FakeCtx(), "r1", "i got a coffee.", assignments) == []
+
+
+async def test_generate_run_reaches_completion_and_ranks(events, fake_llm):
+    ctx = FakeCtx()
+    out = await run_pipeline.func(
+        ctx, {"run_id": "r1", "mode": "generate", "text": "i got a coffee.", "demo_fail": False}
+    )
     assert out["status"] == "completed"
-    assert sent == [("r1", "run_started"), ("r1", "run_completed")]
+    kinds = [k for k, _ in events]
+    assert kinds[0] == "run_started" and kinds[-1] == "run_completed"
+    for required in ("variants_ready", "finalists_selected", "comment", "cringe_scored", "ranking_ready", "reality_ready"):
+        assert required in kinds, required
+    ranking = next(p["ranking"] for k, p in events if k == "ranking_ready")
+    assert len(ranking) == 3
+    assert ctx.calls.count("translate_reality") == 1
 
 
-@pytest.mark.asyncio
-async def test_run_pipeline_reports_failure_and_reraises(monkeypatch):
-    sent: list[str] = []
+async def test_check_run_skips_variants_and_reality(events, fake_llm):
+    out = await run_pipeline.func(
+        ctx := FakeCtx(), {"run_id": "r2", "mode": "check", "text": "my real draft", "demo_fail": False}
+    )
+    assert out["status"] == "completed"
+    kinds = [k for k, _ in events]
+    assert "variants_ready" not in kinds
+    assert "reality_ready" not in kinds
+    assert "translate_reality" not in ctx.calls
+    assert next(p["finalist_ids"] for k, p in events if k == "finalists_selected") == ["draft"]
 
-    async def fake_post_event(run_id, event_type, payload=None, **_):
-        sent.append(event_type)
-        if event_type == "run_started":
-            raise RuntimeError("boom")
 
-    monkeypatch.setattr("workflows.tasks.pipeline.post_event", fake_post_event)
-    with pytest.raises(RuntimeError):
-        await run_pipeline.func(None, {"run_id": "r1", "mode": "generate", "text": "hi", "demo_fail": False})
-    assert sent[-1] == "run_failed"
+async def test_run_failed_is_posted_and_reraised(events, monkeypatch):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr("workflows.tasks.pipeline.call_json", boom)
+    monkeypatch.setattr("workflows.data.load_voices", lambda: [])
+    with pytest.raises(Exception):
+        await run_pipeline.func(
+            FakeCtx(), {"run_id": "r3", "mode": "generate", "text": "x", "demo_fail": False}
+        )
+    assert [k for k, _ in events][-1] == "run_failed"
+
+
+async def test_demo_mode_fails_the_designated_batch_once(events, monkeypatch):
+    """The API decides; the batch obeys. First claim fails, the retry succeeds."""
+    answers = iter([True, False])
+    monkeypatch.setattr("workflows.demo_fail.claim_demo_fail", lambda run_id: _async(next(answers)))
+
+    designated = designated_batch_id(["v01"])
+    post = {"post_id": "v01", "voice_id": "v", "voice_label": "V", "text": "t"}
+
+    with pytest.raises(SimulatedFailure):
+        await run_commenter_batch.func(FakeCtx(), "r1", post, ["p01"], designated, True, designated)
+
+    # Render retries the same batch; this time it runs normally.
+    out = await run_commenter_batch.func(FakeCtx(), "r1", post, ["p01"], designated, True, designated)
+    assert len(out) == 1
+    assert ("demo_failure_triggered", {"batch_id": "v01-b1"}) in events
+
+
+async def test_other_batches_never_fail_in_demo_mode(events):
+    post = {"post_id": "v01", "voice_id": "v", "voice_label": "V", "text": "t"}
+    out = await run_commenter_batch.func(FakeCtx(), "r1", post, ["p01"], "v01-b2", True, "v01-b1")
+    assert len(out) == 1
+
+
+async def test_reality_falls_back_instead_of_failing_the_run(monkeypatch):
+    async def boom(**kwargs):
+        raise LLMError("nope")
+
+    monkeypatch.setattr("workflows.tasks.reality.call_json", boom)
+    out = await translate_reality.func(FakeCtx(), "r1", "i got a coffee.", {"post_id": "v01", "text": "x"})
+    assert "i got a coffee." in out["translation"]
+
+
+def _async(value):
+    async def inner():
+        return value
+
+    return inner()

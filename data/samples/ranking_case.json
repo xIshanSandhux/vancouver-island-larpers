@@ -1,0 +1,49 @@
+{
+  "comment": "Shared ranking fixture. backend/tests/test_ranking.py and frontend/lib/rank.test.ts both read this file, so the Python and TypeScript implementations cannot drift. Expected orders are computed by hand from architecture.md section 8.",
+  "scores": [
+    {
+      "post_id": "v01",
+      "engagement_rate": 0.8,
+      "appeal_mean": 4.0,
+      "base_score": 77.5,
+      "cringe": {
+        "post_id": "v01",
+        "rule_score": 80.0,
+        "llm_score": 80.0,
+        "score": 80.0,
+        "reasons": []
+      }
+    },
+    {
+      "post_id": "v07",
+      "engagement_rate": 0.6,
+      "appeal_mean": 3.0,
+      "base_score": 55.0,
+      "cringe": {
+        "post_id": "v07",
+        "rule_score": 10.0,
+        "llm_score": 10.0,
+        "score": 10.0,
+        "reasons": []
+      }
+    },
+    {
+      "post_id": "v12",
+      "engagement_rate": 0.7,
+      "appeal_mean": 3.5,
+      "base_score": 66.25,
+      "cringe": {
+        "post_id": "v12",
+        "rule_score": 40.0,
+        "llm_score": 40.0,
+        "score": 40.0,
+        "reasons": []
+      }
+    }
+  ],
+  "expected": {
+    "0": ["v01", "v12", "v07"],
+    "0.5": ["v07", "v12", "v01"],
+    "1": ["v07", "v12", "v01"]
+  }
+}

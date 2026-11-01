@@ -33,7 +33,7 @@ Thought Leadr turns a boring sentence into a LinkedIn-style "thought leader" pos
 - **Frontend (`frontend/`):** Next.js (App Router), TypeScript, Tailwind CSS, `zod`, `vitest`. Deployed as a Render web service.
 - **Backend API (`backend/app/`):** Python 3.11+, FastAPI, Pydantic, `httpx`. Deployed as a Render web service (one worker, one instance).
 - **Workflows (`backend/workflows/`):** Python, the Render Workflows Python SDK (`Workflows` app, `@app.task`, `ctx.run`). Deployed as a Render Workflow service with the same root directory (`backend/`) as the API.
-- **Models:** Anthropic Claude for variants, reality translation and rewrite. Featherless AI (OpenAI-compatible client) for the commenter personas, with an `anthropic` fallback via `COMMENTER_PROVIDER`.
+- **Models:** Anthropic Claude only (`claude-haiku-5-5` by default), through `workflows/llm/anthropic_client.py`. Featherless was dropped because its API was not working. Never send `temperature`: this API version rejects it.
 - **Data:** static JSON in `data/`. No database.
 
 ## 4. Commands
@@ -117,7 +117,7 @@ Shared engine rule: **Ishan owns the commenter task and its contract; Mahir's pi
 | ID | Task | Branch | FRs | Est. | Depends on |
 |---|---|---|---|---|---|
 | **I1** | `data/personas.json`: 50 fictional personas (10 archetypes x 5 variations; fields in `architecture.md` section 11) and the commenter prompt text. No real people. | `ishan/personas` | FR-4, FR-14 | 1.0 | none |
-| **I2** | `llm/featherless_client.py` and `run_commenter_batch`: concurrent persona calls with a semaphore, strict JSON validation, one reminder retry then default, per-persona `comment` events, the `COMMENTER_PROVIDER` switch. **Test Featherless concurrency in the first hour** and switch to the Anthropic provider if it is too slow. | `ishan/commenters-task` | FR-4, FR-5 | 1.0 | M1; I1 |
+| **I2** | Replace the stub in `tasks/commenters.py`: real Claude calls per persona via `llm/anthropic_client.call_json`, strict JSON validation, one reminder retry then default, per-persona `comment` events, the `COMMENTER_PROVIDER` switch. Keep the `maybe_fail(...)` call at the top of the task and keep posting one `comment` event per persona. | `ishan/commenters-task` | FR-4, FR-5 | 1.0 | M1; I1 |
 | **I3** | `backend/cringe/`: `features`, `rule_score`, `score`, `hype_score`, `data/cringe_lexicon.json`, unit tests for every feature and the blend (spec in `architecture.md` section 7). | `ishan/cringe-score` | FR-6 | 1.0 | M1 stub (replace it) |
 | **I4** | `run_tone_down` task (Claude rewrite that keeps facts, re-score with the rule part only), `routes/tone_down.py`, guardrail check on the rewrite. | `ishan/tone-down` | FR-11 | 0.75 | M1; I3 |
 | **I5** | Feed UI components in `frontend/components/feed/`: `PostCard`, `ReactionsBar`, `CommentThread` (animated append, no duplicates), `CringeMeter` with reasons. Our own branding and colours, and the "Larping as: Thought Leader" framing from FR-14. Build against `data/samples/` so it does not wait on the backend. | `ishan/feed-ui` | FR-5, FR-6, FR-14 | 1.25 | M1 (contracts and samples) |
@@ -168,6 +168,6 @@ I1 and I3 can start immediately (before M1 merges).
 
 - Render SDK behaviour differs from `architecture.md`: check https://render.com/docs/workflows and the SDK reference, fix the doc, tell the user.
 - Model output is flaky: tighten the prompt, validate with the model class, add the default, log it. Do not add long retry loops.
-- Latency too high: lower `VARIANT_BATCHES` and `COMMENTER_BATCHES_PER_POST`, check the Render per-minute compute limit, and consider `COMMENTER_PROVIDER=anthropic`.
+- Latency too high: lower `VARIANT_BATCHES` and `COMMENTER_BATCHES_PER_POST`, check the Render per-minute compute limit, and check the Anthropic spend limit in the Console.
 - Frontend cannot reach the API after deploy: check `NEXT_PUBLIC_API_URL` (baked in at build time) and `CORS_ORIGINS`.
 - A task is bigger than its estimate: cut scope to the "done when", say what you cut, and move on.

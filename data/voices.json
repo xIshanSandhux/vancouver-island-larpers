@@ -1,0 +1,102 @@
+[
+  {
+    "id": "humblebrag",
+    "label": "Humblebrag",
+    "instruction": "Frame the ordinary event as a quiet achievement. Use 'humbled', 'grateful' or 'privileged' once. Stay modest on the surface while implying the writer is impressive."
+  },
+  {
+    "id": "hot_take",
+    "label": "Hot take",
+    "instruction": "Open with a contrarian claim about the industry drawn from the event. Be confident and slightly combative. Short, punchy lines."
+  },
+  {
+    "id": "story_time",
+    "label": "Story time",
+    "instruction": "Tell it as a short narrative with a beginning, a turn and a lesson. Build small moments into significance."
+  },
+  {
+    "id": "lessons_learned",
+    "label": "Lessons learned",
+    "instruction": "Present exactly three numbered lessons drawn from the event. Each lesson is one short line. End with a question to the reader."
+  },
+  {
+    "id": "unpopular_opinion",
+    "label": "Unpopular opinion",
+    "instruction": "Start with 'Unpopular opinion:' and argue that the small thing in the event matters more than the big thing people focus on."
+  },
+  {
+    "id": "gratitude",
+    "label": "Gratitude post",
+    "instruction": "Thank the people and even the objects involved in the event. Warm, sincere, slightly over the top."
+  },
+  {
+    "id": "nobody_talks",
+    "label": "Nobody talks about this",
+    "instruction": "Claim that nobody talks about the thing in the event. Present it as a hidden truth the reader has been missing."
+  },
+  {
+    "id": "leadership_lens",
+    "label": "Leadership lens",
+    "instruction": "Read the event as a lesson in leadership and management. Use the language of teams, culture and alignment."
+  },
+  {
+    "id": "startup_grind",
+    "label": "Startup grind",
+    "instruction": "Frame the event as evidence of relentless work ethic. Mention early mornings or long hours implied by the event only, never invented facts."
+  },
+  {
+    "id": "vulnerable_share",
+    "label": "Vulnerable share",
+    "instruction": "Share the event as an emotionally honest moment. Admit a small doubt, then recover. Do not invent hardships that are not in the input."
+  },
+  {
+    "id": "data_driven",
+    "label": "Data-driven",
+    "instruction": "Describe the event in the language of metrics and systems, without inventing any numbers. Talk about inputs, outputs and compounding."
+  },
+  {
+    "id": "mentor_voice",
+    "label": "Mentor voice",
+    "instruction": "Address the reader directly as someone earlier in their career. Offer the event as advice. Kind but authoritative."
+  },
+  {
+    "id": "plot_twist",
+    "label": "Plot twist",
+    "instruction": "Set the event up as mundane, then reveal a 'twist' in meaning. Use a one-line paragraph for the turn."
+  },
+  {
+    "id": "industry_prediction",
+    "label": "Industry prediction",
+    "instruction": "Use the event as the basis for a sweeping prediction about where the industry is heading. Confident, forward looking, no invented figures."
+  },
+  {
+    "id": "quiet_flex",
+    "label": "Quiet flex",
+    "instruction": "Understate the event so heavily that it reads as a flex. Short, clipped sentences. Let the restraint do the bragging."
+  },
+  {
+    "id": "checklist",
+    "label": "Checklist",
+    "instruction": "Turn the event into a short checklist of habits the reader should adopt. Use simple dashes, not numbers."
+  },
+  {
+    "id": "reframe",
+    "label": "The reframe",
+    "instruction": "Say most people see this event one way, then reframe it as something more meaningful. Use a 'but here is what I saw' pivot."
+  },
+  {
+    "id": "coach_energy",
+    "label": "Coach energy",
+    "instruction": "Motivational and direct, like a coach at half time. Use imperatives. Keep it short and loud without using many emoji."
+  },
+  {
+    "id": "philosopher",
+    "label": "Philosopher",
+    "instruction": "Treat the event as a small window onto a large truth about work and meaning. Calm, reflective, a little grand."
+  },
+  {
+    "id": "thread_opener",
+    "label": "Thread opener",
+    "instruction": "Write it as the first post of a series. Tease what is coming next and invite the reader to follow along."
+  }
+]
