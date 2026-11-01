@@ -3,7 +3,7 @@
 import Image from "next/image";
 import type { TeamMember } from "./team";
 
-/** One person: glowing headshot, name, and role. */
+/** One person: glowing headshot, name, and a QR to their profile. */
 export function TeamCard({ member, delayMs }: { member: TeamMember; delayMs: number }) {
   return (
     <figure
@@ -39,7 +39,25 @@ export function TeamCard({ member, delayMs }: { member: TeamMember; delayMs: num
         <p className="mt-2 text-base font-bold text-zinc-200 sm:text-lg">{member.role}</p>
       </figcaption>
 
-      <p className="mt-5 font-mono text-xs text-zinc-500">Thought Leadr team</p>
+      <a
+        href={member.url}
+        target="_blank"
+        rel="noreferrer"
+        className="group mt-5 flex flex-col items-center gap-2 rounded-2xl p-2 transition hover:bg-white/5"
+      >
+        <span className="rounded-xl bg-white p-2 shadow-lg shadow-black/40">
+          <Image
+            src={member.qr}
+            alt={`QR code linking to ${member.name} on LinkedIn`}
+            width={200}
+            height={200}
+            className="h-24 w-24 sm:h-28 sm:w-28"
+          />
+        </span>
+        <span className="font-mono text-xs text-zinc-400 transition group-hover:text-white">
+          {member.handle}
+        </span>
+      </a>
     </figure>
   );
 }
