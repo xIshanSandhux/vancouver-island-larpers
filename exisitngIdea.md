@@ -1,7 +1,5 @@
 **Penny is a personal finance and financial literacy app for Canadian students and young adults.** Its main purpose is to help someone answer: “What can I safely spend, where is my money going, and how can I build better habits?”
 
-Your working demo is available at **[localhost:3000](http://localhost:3000)**.
-
 Based on the screens, backend routes, and project decisions, here is what the project includes.
 
 | Feature               | What users can do                                                                                                                                            |

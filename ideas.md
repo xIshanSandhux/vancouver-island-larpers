@@ -181,6 +181,100 @@ A voice game master that runs NPCs with distinct voices, plays ambient sound (ta
 
 Whichever you choose, decide the first 30 seconds of the demo before you write code, and rehearse it with scripted lines so latency can't surprise you.
 
+---
+
+## Penny: recommendation from the finance-app idea
+
+The existing Penny concept is useful and technically credible, but it is too broad for a 12-hour submission and does not naturally express the LarpHacks theme. There is also an important rules issue: the official rules say that all code must be written during the hackathon. Treat Penny as the product concept, not as code to submit from the earlier hackathon.
+
+### Recommended version: Penny — The Adulting Hotline
+
+Make Penny a voice-first financial NPC for students who are LARPing as adults.
+
+The user asks, "Can I spend $75 on dinner and a movie?" Penny uses a deterministic safe-to-spend calculation, then answers in character with a spoken result:
+
+- safe
+- risky
+- do not do it
+- suggested alternative
+
+Give the user a small "financial aura" or quest result so the theme is visible without turning the app into a meaningless game.
+
+### Minimum viable demo
+
+Build only:
+
+1. One preloaded student profile.
+2. A few balances, bills, and a payday date.
+3. One safe-to-spend calculation.
+4. One typed or spoken purchase question.
+5. ElevenLabs speech input/output.
+6. One Render Workflow.
+7. One polished result screen.
+
+Do not rebuild the full accounts, investing, CSV, iPhone, onboarding, or lesson systems for this hackathon.
+
+### Suggested sponsor architecture
+
+```text
+User speaks
+    -> ElevenLabs speech-to-text
+    -> deterministic Penny calculation
+    -> Render Workflow
+         -> generate explanation
+         -> create quest result
+         -> generate ElevenLabs audio
+    -> Penny speaks the answer
+```
+
+Use ElevenLabs as the primary interface, not merely as a text-to-speech button. Render Workflows should handle the asynchronous `calculate -> explain -> generate audio` path rather than the live conversation loop.
+
+### Additional sponsors worth using
+
+- **ConfigCat:** feature flags for `voice_mode`, `quest_mode`, and different Penny personas. This is a quick, visible integration that lets you change behavior without redeploying.
+- **Featherless AI:** generate the explanation from the verified calculation using an open model through its OpenAI-compatible API. The model must never be the authority for the monetary result.
+- **Sentry:** monitor the Next.js frontend and FastAPI backend, especially audio-generation and workflow failures. Scrub transaction amounts and other financial data.
+- **Agentboxd:** optional "email Penny a receipt" feature. Extract a receipt into structured JSON, show the proposed transaction, and require user approval before saving it.
+- **Google/GDG:** optional Gemini structured output or function calling for transaction classification. Use this only if the organizers provide access or confirm it is appropriate for the event.
+- **Codev:** useful for rapidly building and publishing the fresh hackathon version, but keep the source and the build within the hackathon rules.
+- **TechTO:** use for mentorship and feedback rather than forcing a technical integration.
+- **Sportiner:** no obvious developer integration; use only as inspiration for a sports-budget scenario.
+- **Fantasy Kitchen:** use its public student-friendly menu pricing as a realistic dinner example, not as an API integration.
+
+### Penny alternatives that may score better
+
+#### Scam Call Simulator
+
+A user roleplays a call with a fake bank employee, landlord, debt collector, or scammer. ElevenLabs voices the character; the user identifies red flags; the app provides a financial-literacy debrief.
+
+This is probably the strongest theme and ElevenLabs fit because the roleplay is the product. It is also much easier to finish than a full budgeting app.
+
+#### Receipt Quest
+
+The user emails or uploads a receipt. Agentboxd extracts the merchant, date, category, and total. A Render Workflow calculates the budget impact. ElevenLabs announces the result, and the user approves or rejects the transaction.
+
+This is the strongest sponsor-driven Penny variant and has a clear demo moment, but it has more setup and privacy considerations.
+
+#### Campus Survival RPG
+
+The user tries to survive until payday while choosing between food, transit, entertainment, sport, and savings. Penny narrates the consequences as a financial dungeon master.
+
+This has strong theme and demo potential while requiring less implementation than Penny's full product.
+
+#### Financial Negotiation Simulator
+
+The user roleplays a job-offer negotiation, rent increase, credit-card decision, or unexpected expense. ElevenLabs voices the other person, while Penny gives a financial debrief afterward.
+
+This keeps the useful financial-literacy angle while making voice and roleplay essential.
+
+### Final choice
+
+- Choose **Penny — The Adulting Hotline** if preserving the original idea matters most.
+- Choose **Scam Call Simulator** if maximizing theme fit, ElevenLabs usage, and finishability matters most.
+- Choose **Receipt Quest** if you have a team and want the strongest Agentboxd/Render/ElevenLabs integration.
+
+For any choice, script the first 30 seconds of the demo and keep the live path to one successful interaction.
+
 ## Sources
 
 - Render Workflows: <https://render.com/blog/durability-as-code-introducing-render-workflows> and <https://render.com/articles/render-vs-trigger>
