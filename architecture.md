@@ -296,8 +296,8 @@ The last two arguments carry the demo switch; keep the `maybe_fail(...)` call as
 **`translate_reality(ctx, run_id, original, post)`** (Mahir M4)
 One Claude call returning `{translation, inflations}` JSON. Returns `Reality`.
 
-**`run_tone_down(ctx, run_id, draft, cringe_result)`** (Ishan I4)
-Root task for check mode. One Claude call that rewrites the draft to remove the triggered features while keeping the facts. Re-score the rewrite with the rule part only (fast, repeatable). Post `rewrite_ready`.
+**`run_tone_down(ctx, request)`** (Ishan I4)
+Root task for check mode; the API passes `{run_id, draft, cringe_result}` as the single Render task argument. One Claude call that rewrites the draft to remove the triggered features while keeping the facts. Re-score the rewrite with the rule part only (fast, repeatable). Post `rewrite_ready`.
 
 ## 6. Retry and the demo failure switch
 
@@ -409,13 +409,14 @@ Commenter prompt: the system message sets the persona and says "react as this pe
 { "action": "like|comment|ignore|report", "comment": "string or null", "appeal": 1, "cringe_flag": false }
 ```
 
-Rules: `comment` is non-null only when `action` is `comment` (max 140 chars). `appeal` is an integer 1 to 5. `cringe_flag` is true if the persona would roll their eyes. Validate with Pydantic. Use `temperature` around 0.8 so personas vary.
+Rules: `comment` is non-null only when `action` is `comment` (max 140 chars). `appeal` is an integer 1 to 5. `cringe_flag` is true if the persona would roll their eyes. Validate with Pydantic. Persona cards and prompt wording provide variation; do not send a temperature parameter because the configured Claude API rejects it.
 
 ## 12. Models and providers
 
 | Use | Model | Notes |
 |---|---|---|
-| Post variants, reality translation, tone-down rewrite, commenter personas | `CLAUDE_MODEL` (default `claude-haiku-5-5`) | One provider for everything. Featherless was dropped: its API was not working on the day. |
+| Post variants, reality translation, tone-down rewrite | `CLAUDE_MODEL` (default `claude-haiku-5-5`) | Claude |
+| Commenter personas | `COMMENTER_MODEL` (default `claude-haiku-5-5`) | Claude |
 
 **Three things about this API version, all verified against the installed SDK (`anthropic` 2.3.0):**
 - There is **no `temperature`** parameter. Sending one is a 400. Persona variety has to come from the persona card and the prompt, not from sampling.
@@ -446,7 +447,7 @@ Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 1
 | `WORKFLOW_EVENT_SECRET` | both | shared secret for the internal endpoints |
 | `CORS_ORIGINS` | API | comma-separated allowed origins (the frontend URL) |
 | `WEB_BASE_URL` | workflow | public URL of the API, e.g. `https://thought-leadr-api.onrender.com` |
-| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | workflow | Claude |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `COMMENTER_MODEL` | workflow | Claude |
 | `LLM_EFFORT`, `LLM_THINKING_DISABLED`, `LLM_STRUCTURED_OUTPUTS` | workflow | cost and reliability levers (section 12) |
 | `VARIANT_BATCHES`, `COMMENTER_BATCHES_PER_POST`, `LLM_CONCURRENCY` | workflow | optional overrides for section 5.1 |
 | `MAX_ACTIVE_RUNS`, `MAX_RUNS_PER_HOUR` | API | abuse guard (section 10) |
