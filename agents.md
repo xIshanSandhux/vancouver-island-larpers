@@ -59,6 +59,8 @@ npm run lint && npm run typecheck && npm test
 
 Local development without Render: the frontend can render from sample JSON (`NEXT_PUBLIC_USE_SAMPLES=true`), so UI work does not wait on the backend. Workflow task logic is exercised in `pytest` by calling the inner functions directly with a fake event poster. The workflow service starts with `render-workflows workflows.main:app` (run from `backend/`). How to run it locally against a real Render task server is still **VERIFY**: use `render workflows init` output as a reference; tests call task bodies directly (`task.func(None, ...)`).
 
+Render deployment verified November 1, 2026: CLI v2.34.0 created `thought-leadr-workflow` from `main` with root `backend`, Python `3.11.11`, build `pip install -r requirements.txt`, and run command `render-workflows workflows.main:app`. All five tasks registered and a generate run returned 20 variants and 150 reactions through the deployed API. The CLI supports `--env-var` / `--env-file`; secrets were entered in the dashboard. See architecture.md section 14 for service links and measurements. Hobby allows 16 CPU / 64 GB of new workflow compute per minute (excess is queued), 50 root starts/minute, and 1,000 chained starts/minute (excess requests fail).
+
 ## 5. Before every PR
 
 - [ ] `npm run lint && npm run typecheck && npm test` in `frontend/` (if you touched it)

@@ -47,7 +47,7 @@ The API and the workflow service use the **same root directory** (`backend/`), s
 
 - A workflow task run only returns its result **when it finishes**. A user watching a comment section needs results as they happen.
 - Task runs **cannot receive incoming connections**, but they can make outgoing ones. So tasks POST progress events to the API, and the browser polls the API.
-- This also avoids polling the Render API every second. Root-level Render API calls are rate limited (50 per minute on Hobby, **VERIFY**).
+- This also avoids polling the Render API every second. Root-level task starts are limited to 50 per minute on Hobby (confirmed against https://render.com/docs/workflows-limits).
 - The API holds run state in memory. There is no database. That is deliberate for a 7-hour build.
 - Event delivery is idempotent. Every event has an `event_id`, and the store ignores a repeat. Render retries failed tasks, and a retried task re-sends events.
 - The API also watches the started task run (`await` on the SDK's awaitable run). If the root run fails or is cancelled without posting `run_failed`, the API marks the run failed so the UI never hangs.
@@ -251,7 +251,7 @@ All tasks use the Render Python SDK (PyPI package `render`, v1.6, confirmed; `re
 - Retry settings are `Retry(max_retries, wait_duration_ms, backoff_scaling=1.5)` (confirmed). `TaskContext` exposes run ids, not the attempt number, which is why the failure switch asks the API (section 6).
 - Tasks take JSON-serialisable arguments, so tasks receive plain dicts. In tests call the task body directly with `task_definition.func(ctx, ...)`.
 - A task slug has the form `{workflow-slug}/{task-name}`.
-- Limits: a Hobby workspace can start new compute at about 16 CPU per minute (more on Pro). Chained runs over the limit **fail at `ctx.run()`**. Total arguments per run are capped at 4 MB. Up to 1,000 chained runs per minute. **VERIFY** against https://render.com/docs/workflows-limits.
+- Limits (verified against https://render.com/docs/workflows-limits on November 1, 2026): Hobby allows 16 CPU / 64 GB of new compute per minute; Pro allows 32 CPU / 128 GB. Runs exceeding compute limits are **queued**. The separate limit of 1,000 chained starts per minute fails at `ctx.run()` when exceeded. Total arguments per run are capped at 4 MB.
 
 ### 5.1 Granularity (the main performance decision)
 
@@ -303,7 +303,7 @@ Root task for check mode; the API passes `{run_id, draft, cringe_result}` as the
 
 Durability story for the Render judges:
 
-- Every task has `Retry(max_retries=2, wait_duration_ms=1000, backoff_scaling=1.5)` (**VERIFY** parameter names).
+- Every task has `Retry(max_retries=2, wait_duration_ms=1000, backoff_scaling=1.5)` (accepted by SDK 1.6.0 during deployed task registration).
 - A task run is retried on an exception, a timeout, or an instance error.
 - Event posting is idempotent (`event_id`), so a retried batch can safely re-send.
 - Side effects live in child tasks and are keyed (the `event_id`).
@@ -444,7 +444,7 @@ Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 1
 
 | Var | Used by | Purpose |
 |---|---|---|
-| `RENDER_API_KEY` | API | lets the Render SDK start task runs (**VERIFY** where to create it) |
+| `RENDER_API_KEY` | API | lets the Render SDK start task runs; create under Account Settings → API Keys |
 | `RENDER_WORKFLOW_SLUG` | API | the workflow service slug, used to build `{slug}/run_pipeline` |
 | `WORKFLOW_EVENT_SECRET` | both | shared secret for the internal endpoints |
 | `CORS_ORIGINS` | API | comma-separated allowed origins (the frontend URL) |
@@ -460,12 +460,33 @@ Rules: secrets live only in Render environment settings and local `.env` files. 
 ## 14. Deployment on Render (Mahir M1)
 
 1. **Frontend web service.** Root directory `frontend`, build `npm install && npm run build`, start `npm run start`. Set `NEXT_PUBLIC_API_URL` to the API's URL **before** building (it is baked in at build time).
-2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set the Python version to 3.11 (an env var or a `.python-version` file; **VERIFY**, the SDK needs a recent Python). Health check path `/health`.
-3. **Workflow service.** Create it in the dashboard (Workflows are not replicated by Blueprints, per the docs, so do not rely on `render.yaml` for this). Root directory `backend`, build `pip install -r requirements.txt`, start command `render-workflows workflows.main:app`. Set env vars (section 13). Still **VERIFY** in the dashboard: that the root directory setting works as expected for "My own workflow".
+2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set `PYTHON_VERSION=3.11.11` (verified on the workflow build). Health check path `/health`.
+3. **Workflow service.** Created with Render CLI v2.34.0 from `main`: root directory `backend`, build `pip install -r requirements.txt`, run command `render-workflows workflows.main:app`. All five tasks registered and a real generate run completed on November 1, 2026. The CLI supports `--env-var` and `--env-file`; secrets were entered in the dashboard. Slug: `thought-leadr-workflow`. Current docs also support defining workflows in Blueprints, but exclude preview environments and Blueprint replication (https://render.com/docs/workflows).
 4. Use always-on instances for the API and frontend (or ping them before the demo), so there is no cold start while presenting.
 5. Deploy the minimal round trip first: `POST /api/runs` starts `run_pipeline`, which posts `run_started` and `run_completed`; the browser sees the run complete. Confirm this before building anything else.
 6. Auto-deploy from `main`. Because of this, **never push a broken `main`** (see `agents.md`).
 7. Record the three service URLs and the dashboard link in the README before the demo.
+
+### 14.1 Live verification (M1/M8, November 1, 2026)
+
+- Frontend: https://thought-leadr-frontend.onrender.com
+- API: https://thought-leadr-api.onrender.com (`/health` returns 200).
+- Workflow dashboard: https://dashboard.render.com/wfl/wfl-dbjpm1cs728c738fk3m0
+- Frontend JavaScript points to the deployed API; the API's CORS response allows the frontend origin. Browser interaction and visual rehearsal still need a manual check.
+
+Five sequential API-triggered generate runs used `I got a coffee and went to a meeting`, the default four variant batches, two commenter batches per finalist, and concurrency 12. Every run completed with 20 variants, 150 reactions, three scores, a ranking, and reality translation. These timings start at API run creation, so include Render startup but exclude page interaction and browser rendering.
+
+| Run ID | First comment (s) | Completion (s) | Demo retries |
+|---|---:|---:|---:|
+| `run-5b31a48433b4` | 20.9 | 42.73 | 0 |
+| `run-a3d7e681b26d` | 15.31 | 36.73 | 0 |
+| `run-046eb1b840a3` | 16.25 | 39.14 | 0 |
+| `run-64fae1116aba` | 17.09 | 37.72 | 0 |
+| `run-06f4867af9d3` | 18.08 | 43.97 | 1 |
+
+Mean completion: **40.06 s**, worst: **43.97 s**. First comment: approximately **17.53 s mean**, **20.9 s worst** (first run from API logs; later runs sampled at roughly one-second intervals). The 30-second completion target is not yet met. Later roots reached the running state in about 3.9–4.7 s. The first run's initial commenter child pair started together and completed in about 6.6 s, including startup and model work; this is not an isolated startup measurement. Each generate run uses 12 logical task runs: one root, four variant batches, six commenter batches, and one translation. No compute-limit or rate-limit error was observed; absence of brief compute queuing was not established.
+
+Retry evidence: child `trn-0b94gdbjppuhavh9s73alr51g`, under root `trn-0b94gdbjpprav21b0009gpf9g`, has failed attempt 0 and completed attempt 1. The UI payload reports `retries_seen=1`, with 150 unique persona/post reactions. Use the attempt history for proof: the CLI's top-level `retries` field reported zero even for this two-attempt run. Capture dashboard screenshots manually before submission. Both web services were on Free when inspected; upgrading to always-on instances remains pending.
 
 ## 15. Errors, logging, observability
 
