@@ -1,0 +1,294 @@
+{
+  "run_id": "run-sample-0001",
+  "mode": "generate",
+  "status": "completed",
+  "stage": "done",
+  "input_text": "I got a coffee and went to a meeting.",
+  "demo_fail": true,
+  "task_run_id": "trn-sample",
+  "variants": [
+    {
+      "post_id": "v01",
+      "voice_id": "humblebrag",
+      "voice_label": "Humblebrag",
+      "text": "Today I had the privilege of sitting in a room where decisions happen.\n\nBut first, coffee.\n\nI'm humbled by how much a single cup can teach you about showing up.\n\nGrateful for the journey."
+    },
+    {
+      "post_id": "v03",
+      "voice_id": "story_time",
+      "voice_label": "Story time",
+      "text": "I walked into the building with nothing but a coffee and a dream.\n\nNobody knew what the meeting would bring.\n\nI sat down. I listened. I grew."
+    },
+    {
+      "post_id": "v07",
+      "voice_id": "lessons_learned",
+      "voice_label": "Lessons learned",
+      "text": "I got a coffee and went to a meeting. Here are 3 lessons:\n\n1. Great leaders start with the basics\n2. Every meeting is a classroom\n3. Coffee is a mindset\n\nAgree?"
+    },
+    {
+      "post_id": "v12",
+      "voice_id": "unpopular_opinion",
+      "voice_label": "Unpopular opinion",
+      "text": "Unpopular opinion: the meeting is not the work.\n\nThe coffee before it is.\n\nNobody talks about this."
+    },
+    {
+      "post_id": "v18",
+      "voice_id": "gratitude",
+      "voice_label": "Gratitude",
+      "text": "Thank you to everyone who was in that meeting.\n\nAnd thank you to the coffee.\n\nI see you both."
+    }
+  ],
+  "finalist_ids": [
+    "v01",
+    "v07",
+    "v12"
+  ],
+  "comments": [
+    {
+      "event_id": "run-sample-0001:v01:p01",
+      "post_id": "v01",
+      "persona_id": "p01",
+      "persona_name": "Dana",
+      "persona_label": "Talent Acquisition Partner",
+      "archetype": "recruiter",
+      "action": "like",
+      "comment": null,
+      "appeal": 4,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v01:p06",
+      "post_id": "v01",
+      "persona_id": "p06",
+      "persona_name": "Greg",
+      "persona_label": "Growth Marketing Lead",
+      "archetype": "agree_guy",
+      "action": "comment",
+      "comment": "Love this! Open to connect.",
+      "appeal": 4,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v01:p11",
+      "post_id": "v01",
+      "persona_id": "p11",
+      "persona_name": "Kai",
+      "persona_label": "Founder, AI-first startup",
+      "archetype": "ai_pivot_bro",
+      "action": "comment",
+      "comment": "Disrupting the coffee space.",
+      "appeal": 3,
+      "cringe_flag": true
+    },
+    {
+      "event_id": "run-sample-0001:v01:p21",
+      "post_id": "v01",
+      "persona_id": "p21",
+      "persona_name": "Priya",
+      "persona_label": "Staff Software Engineer",
+      "archetype": "skeptical_senior_eng",
+      "action": "ignore",
+      "comment": null,
+      "appeal": 2,
+      "cringe_flag": true
+    },
+    {
+      "event_id": "run-sample-0001:v07:p01",
+      "post_id": "v07",
+      "persona_id": "p01",
+      "persona_name": "Dana",
+      "persona_label": "Talent Acquisition Partner",
+      "archetype": "recruiter",
+      "action": "comment",
+      "comment": "Great post!",
+      "appeal": 4,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v07:p06",
+      "post_id": "v07",
+      "persona_id": "p06",
+      "persona_name": "Greg",
+      "persona_label": "Growth Marketing Lead",
+      "archetype": "agree_guy",
+      "action": "comment",
+      "comment": "Agree 100%.",
+      "appeal": 5,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v07:p11",
+      "post_id": "v07",
+      "persona_id": "p11",
+      "persona_name": "Kai",
+      "persona_label": "Founder, AI-first startup",
+      "archetype": "ai_pivot_bro",
+      "action": "like",
+      "comment": null,
+      "appeal": 4,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v07:p21",
+      "post_id": "v07",
+      "persona_id": "p21",
+      "persona_name": "Priya",
+      "persona_label": "Staff Software Engineer",
+      "archetype": "skeptical_senior_eng",
+      "action": "report",
+      "comment": null,
+      "appeal": 1,
+      "cringe_flag": true
+    },
+    {
+      "event_id": "run-sample-0001:v12:p01",
+      "post_id": "v12",
+      "persona_id": "p01",
+      "persona_name": "Dana",
+      "persona_label": "Talent Acquisition Partner",
+      "archetype": "recruiter",
+      "action": "like",
+      "comment": null,
+      "appeal": 3,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v12:p06",
+      "post_id": "v12",
+      "persona_id": "p06",
+      "persona_name": "Greg",
+      "persona_label": "Growth Marketing Lead",
+      "archetype": "agree_guy",
+      "action": "ignore",
+      "comment": null,
+      "appeal": 2,
+      "cringe_flag": false
+    },
+    {
+      "event_id": "run-sample-0001:v12:p11",
+      "post_id": "v12",
+      "persona_id": "p11",
+      "persona_name": "Kai",
+      "persona_label": "Founder, AI-first startup",
+      "archetype": "ai_pivot_bro",
+      "action": "comment",
+      "comment": "This is just a coffee.",
+      "appeal": 2,
+      "cringe_flag": true
+    },
+    {
+      "event_id": "run-sample-0001:v12:p21",
+      "post_id": "v12",
+      "persona_id": "p21",
+      "persona_name": "Priya",
+      "persona_label": "Staff Software Engineer",
+      "archetype": "skeptical_senior_eng",
+      "action": "comment",
+      "comment": "Hot take, respect.",
+      "appeal": 4,
+      "cringe_flag": false
+    }
+  ],
+  "persona_total": 50,
+  "scores": [
+    {
+      "post_id": "v01",
+      "engagement_rate": 0.5,
+      "appeal_mean": 3.25,
+      "cringe": {
+        "post_id": "v01",
+        "rule_score": 26.0,
+        "llm_score": 50.0,
+        "score": 35.6,
+        "reasons": [
+          {
+            "id": "humblebrag",
+            "label": "Humblebrag phrases",
+            "count": 2,
+            "points": 4.0
+          },
+          {
+            "id": "one_line_paragraphs",
+            "label": "One-line paragraphs",
+            "count": 4,
+            "points": 12.0
+          }
+        ]
+      },
+      "base_score": 53.125
+    },
+    {
+      "post_id": "v07",
+      "engagement_rate": 0.75,
+      "appeal_mean": 3.5,
+      "cringe": {
+        "post_id": "v07",
+        "rule_score": 28.0,
+        "llm_score": 25.0,
+        "score": 26.8,
+        "reasons": [
+          {
+            "id": "listicle",
+            "label": "Listicle format",
+            "count": 1,
+            "points": 6.0
+          },
+          {
+            "id": "engagement_bait",
+            "label": "Engagement-bait ending",
+            "count": 1,
+            "points": 10.0
+          }
+        ]
+      },
+      "base_score": 68.75
+    },
+    {
+      "post_id": "v12",
+      "engagement_rate": 0.5,
+      "appeal_mean": 2.75,
+      "cringe": {
+        "post_id": "v12",
+        "rule_score": 22.0,
+        "llm_score": 50.0,
+        "score": 33.2,
+        "reasons": [
+          {
+            "id": "hook_phrase",
+            "label": "Hook phrase",
+            "count": 2,
+            "points": 10.0
+          },
+          {
+            "id": "one_line_paragraphs",
+            "label": "One-line paragraphs",
+            "count": 3,
+            "points": 12.0
+          }
+        ]
+      },
+      "base_score": 46.875
+    }
+  ],
+  "ranking": [
+    "v07",
+    "v01",
+    "v12"
+  ],
+  "reality": {
+    "post_id": "v07",
+    "original": "I got a coffee and went to a meeting.",
+    "translation": "You got a coffee and went to a meeting; the post claims a leadership masterclass.",
+    "inflations": [
+      "Great leaders start with the basics",
+      "Every meeting is a classroom",
+      "Coffee is a mindset"
+    ]
+  },
+  "rewrite": null,
+  "retries_seen": 1,
+  "error": null,
+  "started_at": "2026-11-01T17:00:00Z",
+  "updated_at": "2026-11-01T17:00:28Z",
+  "last_seq": 12
+}
