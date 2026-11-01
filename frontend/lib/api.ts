@@ -15,7 +15,7 @@ export class RunRequestError extends Error {
   }
 }
 
-async function readError(res: Response): Promise<RunRequestError> {
+export async function readError(res: Response): Promise<RunRequestError> {
   try {
     const parsed = ApiError.safeParse(await res.json());
     if (parsed.success) return new RunRequestError(parsed.data.error, parsed.data.code);
@@ -48,4 +48,12 @@ export async function getRun(runId: string): Promise<RunState> {
   const res = await fetch(`${API_URL}/api/runs/${runId}`, { cache: "no-store" });
   if (!res.ok) throw await readError(res);
   return RunState.parse(await res.json());
+}
+
+export async function startToneDown(runId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/runs/${runId}/tone-down`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw await readError(res);
 }

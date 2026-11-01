@@ -9,7 +9,7 @@ import logging
 from workflows.registry import app
 
 # Importing the task modules registers their tasks on `app`.
-from workflows.tasks import pipeline  # noqa: F401
+from workflows.tasks import pipeline, tone_down  # noqa: F401
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 

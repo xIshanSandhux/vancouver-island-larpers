@@ -27,7 +27,7 @@ def load_voices() -> list[dict]:
 
 @lru_cache
 def load_personas() -> list[dict]:
-    """The 50 commenter personas (Ishan, I1). Empty until that file lands."""
+    """Load the 50 fictional commenter personas (Ishan, I1)."""
     path = DATA_DIR / "personas.json"
     if not path.exists():
         log.warning("personas.json missing; using placeholder persona ids")
