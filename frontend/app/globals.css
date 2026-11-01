@@ -5,6 +5,57 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* --- Intro / outro scene ------------------------------------------------- */
+
+/* The ring that spins behind each headshot. */
+@keyframes glow-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Slow drift for the background colour fields. */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(6%, -4%, 0) scale(1.12); }
+  66%      { transform: translate3d(-5%, 5%, 0) scale(0.95); }
+}
+
+/* Entrance for each element; stagger with inline animation-delay. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes scene-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* The demo settling in once the intro leaves. */
+@keyframes stage-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes pulse-hint {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+.scene-fade-in { animation: scene-fade-in 500ms ease both; }
+.stage-in { animation: stage-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.rise-in { animation: rise-in 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.glow-ring { animation: glow-spin 7s linear infinite; }
+.aurora { animation: aurora-drift 18s ease-in-out infinite; }
+.hint-pulse { animation: pulse-hint 2.4s ease-in-out infinite; }
+
+/* Nobody should get motion sickness during a two-minute demo. */
+@media (prefers-reduced-motion: reduce) {
+  .scene-fade-in, .stage-in, .rise-in, .glow-ring, .aurora, .hint-pulse {
+    animation: none !important;
+  }
+  .rise-in { opacity: 1; transform: none; filter: none; }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { InputPanel } from "@/components/generate/InputPanel";
+import { IntroScene } from "@/components/intro/IntroScene";
 import { PostPreview } from "@/components/generate/PostPreview";
 import { RealityToggle } from "@/components/generate/RealityToggle";
 import { StageTrail } from "@/components/generate/StageTrail";
@@ -10,13 +11,39 @@ import { RENDER_DASHBOARD_URL } from "@/lib/api";
 import { DEFAULT_TONE_WEIGHT, rank } from "@/lib/rank";
 import { useRun } from "@/lib/useRun";
 
+/** We open on the title card, run the demo, then come back to it to close. */
+type Scene = "intro" | "demo" | "outro";
+
 export default function GeneratePage() {
+  const [scene, setScene] = useState<Scene>("intro");
   const [text, setText] = useState("");
   const [demoMode, setDemoMode] = useState(false);
   const [toneWeight, setToneWeight] = useState(DEFAULT_TONE_WEIGHT);
   const { phase, run, error, errorCode, start, reset } = useRun();
 
   const busy = phase === "starting" || phase === "running";
+
+  const showDemo = useCallback(() => setScene("demo"), []);
+
+  // Space or Enter opens the demo from a title card; Escape closes back to one.
+  // Typing in the input must never trigger either.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = el?.tagName === "INPUT" || el?.tagName === "TEXTAREA";
+
+      if (scene === "demo") {
+        if (e.key === "Escape" && !typing) setScene("outro");
+        return;
+      }
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        setScene("demo");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [scene]);
 
   // The slider re-orders what we already have; the server's order is the fallback.
   const order = useMemo(() => {
@@ -28,8 +55,19 @@ export default function GeneratePage() {
   const variantFor = (postId: string) => run?.variants.find((v) => v.post_id === postId);
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
-      <header className="mb-6">
+    <>
+      {scene !== "demo" && (
+        <IntroScene mode={scene === "intro" ? "intro" : "outro"} onStart={showDemo} />
+      )}
+
+      {/* The run itself lives in this component's state, so returning to the title
+          card and back never loses a run in flight. The key only replays the
+          entrance animation each time the demo comes forward. */}
+      <main
+        key={scene === "demo" ? "demo" : "hidden"}
+        className="stage-in mx-auto w-full max-w-2xl flex-1 px-4 py-10"
+      >
+        <header className="mb-6">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             Thought Leadr
@@ -122,6 +160,16 @@ export default function GeneratePage() {
           )}
         </div>
       )}
-    </main>
+      </main>
+
+      <button
+        type="button"
+        onClick={() => setScene("outro")}
+        title="Back to the title card (Esc)"
+        className="fixed bottom-4 right-4 z-40 rounded-full border border-zinc-300 bg-white/90 px-4 py-2 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur transition hover:border-zinc-900 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:border-zinc-300 dark:hover:text-zinc-100"
+      >
+        Team
+      </button>
+    </>
   );
 }
