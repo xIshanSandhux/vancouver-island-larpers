@@ -7,5 +7,5 @@ anthropic>=0.40
 openai>=1.50
 python-dotenv>=1.0
 pytest>=8.0
-# Render Workflows SDK is added in task M1 once the install name is confirmed
-# against https://render.com/docs/workflows-sdk-python
+render>=1.6
+pytest-asyncio>=0.24

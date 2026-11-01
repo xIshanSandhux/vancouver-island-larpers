@@ -12,7 +12,7 @@ Three deployables, two folders of code, one repo:
 |---|---|---|---|
 | Frontend (Next.js UI) | `frontend/` | web service | `npm run start` |
 | API (FastAPI) | `backend/` (`backend/app/`) | web service | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1` |
-| Workflow tasks (Python) | `backend/` (`backend/workflows/`) | **Workflow service** | **VERIFY** (expected `python -m workflows.main`) |
+| Workflow tasks (Python) | `backend/` (`backend/workflows/`) | **Workflow service** | `render-workflows workflows.main:app` (confirmed from the SDK's CLI) |
 
 The API and the workflow service use the **same root directory** (`backend/`), so they share one Python codebase, one `requirements.txt`, the same Pydantic models and the same `cringe/` module.
 
@@ -237,15 +237,16 @@ CORS allows only the origins in `CORS_ORIGINS` (the frontend URL). Errors use th
 
 `RunStore` is a dict guarded by an `asyncio.Lock`. Runs expire after 1 hour. The API **must run as one instance with one worker** (`--workers 1`, one Render instance) because state is in memory.
 
-Render SDK usage (Python, **VERIFY** all names): `RenderAsync` with `.workflows.start_task(task_slug, input_data)` returns an awaitable run; awaiting raises `TaskRunError` on failure. `task_slug` is `{workflow-slug}/{task-name}`; `input_data` is a list of positional arguments. Add the SDK to `requirements.txt` in M1 once the package name is confirmed.
+Render SDK usage (Python, confirmed in the SDK source): `from render import RenderAsync`; `await RenderAsync().workflows.start_task(task_slug, input_data)` returns an awaitable run, and awaiting it raises on failure. `task_slug` is `{workflow-slug}/{task-name}`; `input_data` is a list of positional arguments. `RENDER_API_KEY` is read from the environment. The SDK is already in `requirements.txt`.
 
 ## 5. Workflow tasks (Python, `backend/workflows/`)
 
-All tasks use the Render Python SDK. Facts from the docs:
+All tasks use the Render Python SDK (PyPI package `render`, v1.6, confirmed; `render_sdk` is only a deprecated shim). Verified against the installed SDK source:
 
 - Create the app with `Workflows(default_retry=..., default_timeout=..., default_plan=...)`. Register tasks with `@app.task`. Call `app.start()` in the entry point.
 - Every task function takes a `TaskContext` as its first argument. Chain a task with `await ctx.run(other_task, args...)`. Run children in parallel with `asyncio.gather` or `asyncio.TaskGroup` (otherwise they run one after another).
-- Retry settings are `Retry(max_retries, wait_duration_ms, backoff_scaling)`. Defaults without settings are 3 retries, 1 s wait, doubling.
+- Retry settings are `Retry(max_retries, wait_duration_ms, backoff_scaling=1.5)` (confirmed). `TaskContext` exposes run ids, not the attempt number, which is why the failure switch asks the API (section 6).
+- Tasks take JSON-serialisable arguments, so tasks receive plain dicts. In tests call the task body directly with `task_definition.func(ctx, ...)`.
 - A task slug has the form `{workflow-slug}/{task-name}`.
 - Limits: a Hobby workspace can start new compute at about 16 CPU per minute (more on Pro). Chained runs over the limit **fail at `ctx.run()`**. Total arguments per run are capped at 4 MB. Up to 1,000 chained runs per minute. **VERIFY** against https://render.com/docs/workflows-limits.
 
@@ -449,8 +450,8 @@ Rules: secrets live only in Render environment settings and local `.env` files. 
 ## 14. Deployment on Render (Mahir M1)
 
 1. **Frontend web service.** Root directory `frontend`, build `npm install && npm run build`, start `npm run start`. Set `NEXT_PUBLIC_API_URL` to the API's URL **before** building (it is baked in at build time).
-2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set the Python version to 3.11 (an env var or a `.python-version` file; **VERIFY**). Health check path `/health`.
-3. **Workflow service.** Create it in the dashboard (Workflows are not replicated by Blueprints, per the docs, so do not rely on `render.yaml` for this). Root directory `backend`, build `pip install -r requirements.txt`, start command **VERIFY**. Set env vars (section 13).
+2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set the Python version to 3.11 (an env var or a `.python-version` file; **VERIFY**, the SDK needs a recent Python). Health check path `/health`.
+3. **Workflow service.** Create it in the dashboard (Workflows are not replicated by Blueprints, per the docs, so do not rely on `render.yaml` for this). Root directory `backend`, build `pip install -r requirements.txt`, start command `render-workflows workflows.main:app`. Set env vars (section 13). Still **VERIFY** in the dashboard: that the root directory setting works as expected for "My own workflow".
 4. Use always-on instances for the API and frontend (or ping them before the demo), so there is no cold start while presenting.
 5. Deploy the minimal round trip first: `POST /api/runs` starts `run_pipeline`, which posts `run_started` and `run_completed`; the browser sees the run complete. Confirm this before building anything else.
 6. Auto-deploy from `main`. Because of this, **never push a broken `main`** (see `agents.md`).

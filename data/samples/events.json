@@ -1,0 +1,166 @@
+[
+  {
+    "event_id": "run-sample-0001:run_started",
+    "type": "run_started",
+    "payload": {
+      "mode": "generate",
+      "input_text": "I got a coffee and went to a meeting."
+    }
+  },
+  {
+    "event_id": "run-sample-0001:stage:variants",
+    "type": "stage",
+    "payload": {
+      "stage": "variants"
+    }
+  },
+  {
+    "event_id": "run-sample-0001:variants_ready",
+    "type": "variants_ready",
+    "payload": {
+      "variants": [
+        {
+          "post_id": "v01",
+          "voice_id": "humblebrag",
+          "voice_label": "Humblebrag",
+          "text": "Today I had the privilege of sitting in a room where decisions happen.\n\nBut first, coffee.\n\nI'm humbled by how much a single cup can teach you about showing up.\n\nGrateful for the journey."
+        },
+        {
+          "post_id": "v03",
+          "voice_id": "story_time",
+          "voice_label": "Story time",
+          "text": "I walked into the building with nothing but a coffee and a dream.\n\nNobody knew what the meeting would bring.\n\nI sat down. I listened. I grew."
+        },
+        {
+          "post_id": "v07",
+          "voice_id": "lessons_learned",
+          "voice_label": "Lessons learned",
+          "text": "I got a coffee and went to a meeting. Here are 3 lessons:\n\n1. Great leaders start with the basics\n2. Every meeting is a classroom\n3. Coffee is a mindset\n\nAgree?"
+        },
+        {
+          "post_id": "v12",
+          "voice_id": "unpopular_opinion",
+          "voice_label": "Unpopular opinion",
+          "text": "Unpopular opinion: the meeting is not the work.\n\nThe coffee before it is.\n\nNobody talks about this."
+        },
+        {
+          "post_id": "v18",
+          "voice_id": "gratitude",
+          "voice_label": "Gratitude",
+          "text": "Thank you to everyone who was in that meeting.\n\nAnd thank you to the coffee.\n\nI see you both."
+        }
+      ]
+    }
+  },
+  {
+    "event_id": "run-sample-0001:finalists_selected",
+    "type": "finalists_selected",
+    "payload": {
+      "finalist_ids": [
+        "v01",
+        "v07",
+        "v12"
+      ]
+    }
+  },
+  {
+    "event_id": "run-sample-0001:comment:v01:p01",
+    "type": "comment",
+    "payload": {
+      "event_id": "run-sample-0001:v01:p01",
+      "post_id": "v01",
+      "persona_id": "p01",
+      "persona_name": "Dana",
+      "persona_label": "Talent Acquisition Partner",
+      "archetype": "recruiter",
+      "action": "like",
+      "comment": null,
+      "appeal": 4,
+      "cringe_flag": false
+    }
+  },
+  {
+    "event_id": "run-sample-0001:demo_failure_triggered",
+    "type": "demo_failure_triggered",
+    "payload": {
+      "batch_id": "v01-b1"
+    }
+  },
+  {
+    "event_id": "run-sample-0001:cringe_scored:v01",
+    "type": "cringe_scored",
+    "payload": {
+      "post_id": "v01",
+      "engagement_rate": 0.5,
+      "appeal_mean": 3.25,
+      "cringe": {
+        "post_id": "v01",
+        "rule_score": 26.0,
+        "llm_score": 50.0,
+        "score": 35.6,
+        "reasons": [
+          {
+            "id": "humblebrag",
+            "label": "Humblebrag phrases",
+            "count": 2,
+            "points": 4.0
+          },
+          {
+            "id": "one_line_paragraphs",
+            "label": "One-line paragraphs",
+            "count": 4,
+            "points": 12.0
+          }
+        ]
+      },
+      "base_score": 53.125
+    }
+  },
+  {
+    "event_id": "run-sample-0001:ranking_ready",
+    "type": "ranking_ready",
+    "payload": {
+      "ranking": [
+        "v07",
+        "v01",
+        "v12"
+      ]
+    }
+  },
+  {
+    "event_id": "run-sample-0001:reality_ready",
+    "type": "reality_ready",
+    "payload": {
+      "post_id": "v07",
+      "original": "I got a coffee and went to a meeting.",
+      "translation": "You got a coffee and went to a meeting; the post claims a leadership masterclass.",
+      "inflations": [
+        "Great leaders start with the basics",
+        "Every meeting is a classroom",
+        "Coffee is a mindset"
+      ]
+    }
+  },
+  {
+    "event_id": "run-sample-0001:rewrite_ready",
+    "type": "rewrite_ready",
+    "payload": {
+      "post_id": "draft",
+      "text": "I lost my job and learned a few things. Happy to chat if useful.",
+      "cringe_before": 71.0,
+      "cringe_after": 12.0
+    }
+  },
+  {
+    "event_id": "run-sample-0001:run_completed",
+    "type": "run_completed",
+    "payload": {}
+  },
+  {
+    "event_id": "run-sample-0001:run_failed",
+    "type": "run_failed",
+    "payload": {
+      "error": "example failure"
+    }
+  }
+]

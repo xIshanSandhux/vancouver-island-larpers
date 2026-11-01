@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     web_base_url: str = "http://localhost:8000"
     cors_origins: str = Field(default="http://localhost:3000", description="comma separated")
 
+    # Workflow granularity (architecture.md section 5.1). Tune after measuring on Render.
+    variant_batches: int = 4
+    commenter_batches_per_post: int = 2
+    llm_concurrency: int = 12
+
+    # Abuse guard (architecture.md section 10)
+    max_active_runs: int = 2
+    max_runs_per_hour: int = 60
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
