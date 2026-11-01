@@ -18,7 +18,9 @@ _SCHEMA = {
     "type": "object",
     "properties": {
         "translation": {"type": "string"},
-        "inflations": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+        # No maxItems here: structured outputs reject it with a 400 for array types.
+        # The cap is applied in code below and again by the Reality model.
+        "inflations": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["translation", "inflations"],
     "additionalProperties": False,

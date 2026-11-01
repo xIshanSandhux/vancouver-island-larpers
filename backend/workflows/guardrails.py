@@ -34,7 +34,11 @@ _COMMON = {
 _DIGITS = re.compile(r"\d+")
 _LIST_MARKER = re.compile(r"^\s*\d+[.)]\s", re.MULTILINE)
 _CAP_WORD = re.compile(r"\b[A-Z][A-Za-z]{1,}\b")
-_SENTENCE_START = re.compile(r"(?:^|[.!?]\s+|\n\s*)$")
+# A capital is unremarkable at the start of a sentence, a line, a bullet, a numbered
+# item, or after a colon. Only capitals elsewhere suggest an invented name.
+_SENTENCE_START = re.compile(r"(?:^|[.!?:;]\s+|[\n\r]\s*(?:[-*•+]\s*|\d+[.)]\s*)?|[\"'“‘(\[]\s*)$")
+# Hashtags are decoration, not factual claims, and #Hustle is not an invented employer.
+_HASHTAG = re.compile(r"(?<!\w)#\w+")
 
 
 def _digit_runs(text: str) -> set[str]:
@@ -55,11 +59,13 @@ def check_variant(input_text: str, output_text: str) -> list[str]:
     # is most likely an invented company, product or person.
     lowered_input = input_text.lower()
     invented: list[str] = []
-    for match in _CAP_WORD.finditer(output_text):
+    # Blank out hashtags first, keeping offsets so sentence-start detection still works.
+    scannable = _HASHTAG.sub(lambda m: " " * len(m.group(0)), output_text)
+    for match in _CAP_WORD.finditer(scannable):
         word = match.group(0)
         if word.lower() in _COMMON or word.lower() in lowered_input:
             continue
-        if _SENTENCE_START.search(output_text[: match.start()]):
+        if _SENTENCE_START.search(scannable[: match.start()]):
             continue
         invented.append(word)
     if invented:

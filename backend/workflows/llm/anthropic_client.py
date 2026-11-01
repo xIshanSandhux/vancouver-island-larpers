@@ -112,9 +112,13 @@ async def call_json(
             async with get_semaphore():
                 message = await client.messages.create(messages=messages, **kwargs)
         except APIStatusError as exc:
-            # 4xx is a bug in our request; retrying it wastes the budget.
+            # 4xx is a bug in our request; retrying it wastes the budget. Carry the
+            # API's own message: a silent schema rejection once hid a broken feature
+            # behind a fallback for an entire build.
             if exc.status_code < 500:
-                raise LLMError(f"model rejected the request: {exc.status_code}") from exc
+                detail = getattr(exc, "message", "") or str(exc)
+                log.error("model rejected the request (%s): %s", exc.status_code, detail)
+                raise LLMError(f"model rejected the request ({exc.status_code}): {detail}") from exc
             last_error = exc
             await asyncio.sleep(0.5 * attempt)
             continue

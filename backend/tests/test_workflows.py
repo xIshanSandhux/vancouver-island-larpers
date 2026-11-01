@@ -12,7 +12,7 @@ from workflows.demo_fail import SimulatedFailure, designated_batch_id
 from workflows.events import claim_demo_fail, make_event_id, post_event
 from workflows.llm.anthropic_client import LLMError, extract_json
 from workflows.main import app
-from workflows.tasks.commenters import run_commenter_batch
+from workflows.tasks.commenters import MAX_COMMENT_CHARS, PersonaReaction, run_commenter_batch
 from workflows.tasks.pipeline import run_pipeline, write_variant_batch
 from workflows.tasks.reality import translate_reality
 
@@ -206,3 +206,138 @@ def _async(value):
         return value
 
     return inner()
+
+
+class TestPersonaReactionNormalisation:
+    """Claude's reply is reconciled rather than rejected.
+
+    Regression test for a bug found by running the real model: roughly one reply in
+    six chose "like" *and* wrote a comment, which the validator refused. Those were
+    replaced by a neutral "ignore", which discarded the liveliest reactions and their
+    cringe flags.
+    """
+
+    def test_a_like_with_a_comment_becomes_a_comment(self):
+        reaction = PersonaReaction.model_validate(
+            {"action": "like", "comment": "Love this! 🎉", "appeal": 3, "cringe_flag": True}
+        )
+        assert reaction.action == "comment"
+        assert reaction.comment == "Love this! 🎉"
+        assert reaction.cringe_flag is True
+
+    def test_a_comment_with_no_text_becomes_an_ignore(self):
+        reaction = PersonaReaction.model_validate(
+            {"action": "comment", "comment": "   ", "appeal": 2, "cringe_flag": False}
+        )
+        assert reaction.action == "ignore"
+        assert reaction.comment is None
+
+    @pytest.mark.parametrize("action", ["ignore", "report"])
+    def test_text_is_dropped_when_the_persona_scrolled_past(self, action):
+        reaction = PersonaReaction.model_validate(
+            {"action": action, "comment": "why am I talking", "appeal": 1, "cringe_flag": True}
+        )
+        assert reaction.action == action
+        assert reaction.comment is None
+
+    def test_well_formed_replies_are_untouched(self):
+        for raw in (
+            {"action": "comment", "comment": "Great post!", "appeal": 4, "cringe_flag": False},
+            {"action": "like", "comment": None, "appeal": 5, "cringe_flag": False},
+            {"action": "ignore", "comment": None, "appeal": 2, "cringe_flag": False},
+        ):
+            reaction = PersonaReaction.model_validate(raw)
+            assert reaction.action == raw["action"]
+            assert reaction.comment == raw["comment"]
+
+    def test_the_invariant_the_feed_relies_on_always_holds(self):
+        """Whatever Claude sends, comment text exists if and only if action is comment."""
+        for action in ("like", "comment", "ignore", "report"):
+            for comment in (None, "", "   ", "something"):
+                reaction = PersonaReaction.model_validate(
+                    {"action": action, "comment": comment, "appeal": 3, "cringe_flag": False}
+                )
+                assert (reaction.comment is not None) == (reaction.action == "comment")
+
+
+def test_schemas_sent_to_the_api_avoid_unsupported_keywords():
+    """Structured outputs reject some JSON Schema keywords with a 400.
+
+    A `maxItems` on the reality schema made every real call fail and fall back
+    silently, so the feature looked fine in tests and was dead in production.
+    Caps belong in the Pydantic models instead.
+    """
+    import json
+
+    from workflows.tasks.commenters import PersonaReaction
+    from workflows.tasks.pipeline import _VARIANT_SCHEMA
+    from workflows.tasks.reality import _SCHEMA
+
+    unsupported = ("maxItems", "minItems")
+    for name, schema in (
+        ("reality", _SCHEMA),
+        ("variant", _VARIANT_SCHEMA),
+        ("persona reaction", PersonaReaction.model_json_schema()),
+    ):
+        serialised = json.dumps(schema)
+        for keyword in unsupported:
+            assert keyword not in serialised, f"{name} schema still sends {keyword}"
+
+
+async def test_reality_caps_inflations_without_relying_on_the_schema(monkeypatch):
+    """The cap moved out of the schema, so prove it is still enforced."""
+
+    async def five_inflations(**kwargs):
+        return {"translation": "inflated a coffee", "inflations": [f"p{i}" for i in range(5)]}
+
+    monkeypatch.setattr("workflows.tasks.reality.call_json", five_inflations)
+    out = await translate_reality.func(
+        FakeCtx(), "r1", "i got a coffee.", {"post_id": "v01", "text": "x"}
+    )
+    assert len(out["inflations"]) == 3
+    assert out["translation"] == "inflated a coffee"
+
+
+class TestOverLongComments:
+    """Pydantic rejected comments over 140 chars, discarding the whole reaction.
+
+    That showed up as intermittent fallbacks in real runs, worst on posts that invite
+    longer replies. Trimming keeps the persona's reaction and its cringe flag.
+    """
+
+    LONG = (
+        "This is a genuinely thoughtful reply about coffee rituals and meeting culture "
+        "that simply runs well past the limit the prompt asked the model to respect."
+    )
+
+    def test_a_long_comment_is_trimmed_not_discarded(self):
+        reaction = PersonaReaction.model_validate(
+            {"action": "comment", "comment": self.LONG, "appeal": 4, "cringe_flag": True}
+        )
+        assert reaction.action == "comment"
+        assert reaction.comment is not None
+        assert len(reaction.comment) <= MAX_COMMENT_CHARS
+        assert reaction.comment.endswith("…")
+        assert reaction.cringe_flag is True
+
+    def test_trimming_happens_at_a_word_boundary(self):
+        reaction = PersonaReaction.model_validate(
+            {"action": "comment", "comment": self.LONG, "appeal": 3, "cringe_flag": False}
+        )
+        assert "  " not in reaction.comment
+        assert self.LONG.startswith(reaction.comment.rstrip("…"))
+
+    def test_a_comment_at_the_limit_is_untouched(self):
+        exact = "x" * MAX_COMMENT_CHARS
+        reaction = PersonaReaction.model_validate(
+            {"action": "comment", "comment": exact, "appeal": 3, "cringe_flag": False}
+        )
+        assert reaction.comment == exact
+
+    def test_a_long_comment_on_a_like_survives_both_fixes(self):
+        """Over-length text plus the like/comment mismatch, together."""
+        reaction = PersonaReaction.model_validate(
+            {"action": "like", "comment": self.LONG, "appeal": 5, "cringe_flag": True}
+        )
+        assert reaction.action == "comment"
+        assert len(reaction.comment) <= MAX_COMMENT_CHARS

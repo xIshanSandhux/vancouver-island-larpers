@@ -18,18 +18,56 @@ from workflows.registry import app
 log = logging.getLogger("workflows.commenters")
 
 
+MAX_COMMENT_CHARS = 140
+
+
 class PersonaReaction(BaseModel):
     """The small, strictly validated object accepted from Claude."""
 
     model_config = ConfigDict(extra="forbid")
 
     action: Action
-    comment: str | None = Field(default=None, max_length=140)
+    comment: str | None = Field(default=None, max_length=MAX_COMMENT_CHARS)
     appeal: Literal[1, 2, 3, 4, 5]
     cringe_flag: bool
 
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_action_and_comment(cls, data: Any) -> Any:
+        """Make the reply consistent instead of rejecting it.
+
+        Claude frequently likes a post *and* writes a comment, which is exactly what
+        a real person does. Rejecting that fell back to a neutral "ignore" and threw
+        away the liveliest reactions, mostly from the praise-happy archetypes.
+        """
+        if not isinstance(data, dict):
+            return data
+        raw_comment = data.get("comment")
+        text = raw_comment.strip() if isinstance(raw_comment, str) else ""
+
+        if text:
+            # Claude occasionally runs past the 140 the prompt asks for. Trimming at a
+            # word boundary keeps the reaction; rejecting it threw the whole thing away.
+            if len(text) > MAX_COMMENT_CHARS:
+                clipped = text[: MAX_COMMENT_CHARS - 1]
+                text = (clipped.rsplit(" ", 1)[0] if " " in clipped else clipped) + "…"
+            data["comment"] = text
+            # Said something while liking: that is a comment.
+            if data.get("action") == "like":
+                data["action"] = "comment"
+            # You cannot comment while scrolling past or reporting.
+            elif data.get("action") in ("ignore", "report"):
+                data["comment"] = None
+        else:
+            data["comment"] = None
+            # Claimed to comment but wrote nothing: they had nothing to say.
+            if data.get("action") == "comment":
+                data["action"] = "ignore"
+        return data
+
     @model_validator(mode="after")
-    def validate_comment_action(self) -> "PersonaReaction":
+    def check_invariants(self) -> "PersonaReaction":
+        """Guard the invariant the rest of the pipeline and the feed rely on."""
         if self.action == "comment" and not self.comment:
             raise ValueError("comment action requires comment text")
         if self.action != "comment" and self.comment is not None:
