@@ -1,6 +1,7 @@
 "use client";
 
 import { GENERATE_MAX_CHARS } from "@/lib/contracts";
+import { inputError } from "@/lib/ui";
 
 const EXAMPLES = [
   "I got a coffee and went to a meeting.",
@@ -19,6 +20,7 @@ interface Props {
 
 export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onSubmit, busy }: Props) {
   const tooLong = text.length > GENERATE_MAX_CHARS;
+  const validationMessage = inputError(text, GENERATE_MAX_CHARS);
   const canSubmit = text.trim().length > 0 && !tooLong && !busy;
 
   return (
@@ -31,6 +33,7 @@ export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onS
         value={text}
         disabled={busy}
         aria-describedby="event-hint"
+        aria-invalid={tooLong}
         onChange={(e) => onTextChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit) onSubmit();
@@ -40,6 +43,11 @@ export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onS
         className="mt-2 w-full resize-none rounded-lg border border-zinc-300 bg-white p-3 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
       />
       <p id="event-hint" className="mt-1 text-xs text-zinc-500">What actually happened? One ordinary sentence is enough.</p>
+      {validationMessage && (
+        <p className={`mt-2 text-xs ${tooLong ? "text-red-600 dark:text-red-400" : "text-zinc-500"}`} role="status">
+          {validationMessage}
+        </p>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-xs text-zinc-500">Try:</span>

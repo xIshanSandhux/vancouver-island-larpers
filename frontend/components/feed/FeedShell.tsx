@@ -40,7 +40,10 @@ export function FeedShell({ children, mode, run, status }: {
         <main id="main-content" className="min-w-0 space-y-4">{children}</main>
         <aside aria-label="Audience and workflow" className="space-y-4 lg:sticky lg:top-20">
           <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-xs font-semibold uppercase tracking-wider text-teal-800 dark:text-teal-300">The rehearsal room</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-teal-800 dark:text-teal-300">The rehearsal room</p>
+              <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950 dark:text-amber-200">Simulated audience</span>
+            </div>
             <h2 className="mt-2 text-lg font-semibold">50 fictional perspectives.</h2>
             <p className="mt-2 text-sm leading-relaxed text-zinc-500">Recruiters, skeptics, founders, lurkers, and the person who always says “Great post.”</p>
             {run && <p className="mt-4 border-t border-zinc-100 pt-3 text-sm tabular-nums dark:border-zinc-800">{run.comments.length} / {expected || (mode === "generate" ? 150 : 50)} reactions received</p>}

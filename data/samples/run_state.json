@@ -286,6 +286,7 @@
     ]
   },
   "rewrite": null,
+  "rewrite_error": null,
   "retries_seen": 1,
   "error": null,
   "started_at": "2026-11-01T17:00:00Z",

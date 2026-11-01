@@ -167,8 +167,7 @@ async def run_pipeline(ctx: TaskContext, req: dict[str, Any]) -> dict[str, Any]:
         persona_batches = chunk(all_ids, settings.commenter_batches_per_post)
         designated = designated_batch_id(finalist_ids) if demo_fail else None
 
-        scores = []
-        for post_id in finalist_ids:
+        async def run_finalist(post_id: str) -> Any:
             variant = finalists[post_id]
             returned = await asyncio.gather(
                 *(
@@ -185,7 +184,11 @@ async def run_pipeline(ctx: TaskContext, req: dict[str, Any]) -> dict[str, Any]:
                 )
             )
             comments = [CommentResult.model_validate(c) for batch in returned for c in batch]
-            scores.append(await _score_finalist(run_id, variant, comments, len(all_ids)))
+            return await _score_finalist(run_id, variant, comments, len(all_ids))
+
+        # Fan out all finalist batches together. The shared LLM semaphore still caps
+        # Anthropic calls, while Render can overlap the independent commenter tasks.
+        scores = list(await asyncio.gather(*(run_finalist(post_id) for post_id in finalist_ids)))
 
         # 3. Rank, then explain the joke on the winner.
         await post_event(run_id, "stage", {"stage": "ranking"}, key="ranking")

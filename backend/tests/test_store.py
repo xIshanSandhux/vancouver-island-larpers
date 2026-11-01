@@ -99,9 +99,34 @@ async def test_a_finished_run_is_not_overwritten_by_a_late_watcher(store):
     assert (await store.get(run.run_id)).status == "completed"
 
 
+async def test_a_finished_run_ignores_a_late_failure_event(store):
+    run = await store.create("generate", "hello", demo_fail=False)
+    await store.apply_event(run.run_id, event("done", "run_completed"))
+    await store.apply_event(run.run_id, event("late-failure", "run_failed", {"error": "late"}))
+    state = await store.get(run.run_id)
+    assert state.status == "completed"
+    assert state.error is None
+
+
 async def test_active_count_tracks_unfinished_runs(store):
     a = await store.create("generate", "a", demo_fail=False)
     await store.create("generate", "b", demo_fail=False)
     assert await store.active_count() == 2
     await store.apply_event(a.run_id, event("e1", "run_completed"))
     assert await store.active_count() == 1
+
+
+async def test_create_if_available_reserves_the_last_slot(store):
+    first = await store.create_if_available("generate", "a", False, 1)
+    second = await store.create_if_available("generate", "b", False, 1)
+    assert first is not None
+    assert second is None
+
+
+async def test_rewrite_failed_does_not_fail_the_original_run(store):
+    run = await store.create("check", "draft", demo_fail=False)
+    await store.apply_event(run.run_id, event("done", "run_completed"))
+    await store.apply_event(run.run_id, event("rewrite-error", "rewrite_failed", {"error": "unsafe"}))
+    state = await store.get(run.run_id)
+    assert state.status == "completed"
+    assert state.rewrite_error == "unsafe"

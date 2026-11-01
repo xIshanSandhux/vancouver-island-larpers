@@ -28,10 +28,9 @@ async def create_run(req: RunRequest, request: Request) -> JSONResponse:
     except GuardError as exc:
         return _error(exc.code, exc.message, exc.status)
 
-    if await store.active_count() >= settings.max_active_runs:
+    run = await store.create_if_available(req.mode, text, req.demo_fail, settings.max_active_runs)
+    if run is None:
         return _error("busy", "Both demo slots are busy, try again in a few seconds.", 429)
-
-    run = await store.create(req.mode, text, req.demo_fail)
     payload = {"run_id": run.run_id, "mode": req.mode, "text": text, "demo_fail": req.demo_fail}
     try:
         task_run_id = await start_run("run_pipeline", payload, run_id=run.run_id)

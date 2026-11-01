@@ -9,9 +9,10 @@ import secrets
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from app.config import get_settings
-from app.models import RunEvent
+from app.models import ApiError, RunEvent, validate_payload
 from app.store import store
 
 log = logging.getLogger("app.internal")
@@ -31,6 +32,15 @@ async def ingest_event(
 ) -> JSONResponse:
     if not _authorized(authorization):
         return JSONResponse(status_code=401, content={"error": "unauthorized", "code": "not_found"})
+
+    try:
+        validate_payload(event.type, event.payload)
+    except (KeyError, ValidationError) as exc:
+        log.warning("invalid event run_id=%s type=%s error=%s", run_id, event.type, type(exc).__name__)
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(error="Invalid event payload.", code="invalid_input").model_dump(),
+        )
 
     known, duplicate = await store.apply_event(run_id, event)
     if not known:

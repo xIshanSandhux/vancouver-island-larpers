@@ -157,6 +157,13 @@
     "payload": {}
   },
   {
+    "event_id": "run-sample-0001:rewrite_failed",
+    "type": "rewrite_failed",
+    "payload": {
+      "error": "The rewrite did not pass its safety checks."
+    }
+  },
+  {
     "event_id": "run-sample-0001:run_failed",
     "type": "run_failed",
     "payload": {

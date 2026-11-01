@@ -77,5 +77,5 @@ async def run_tone_down(ctx: TaskContext, request: dict[str, Any]) -> dict[str, 
         except Exception as exc:
             last_error = f"Rewrite response was invalid: {type(exc).__name__}."
 
-    await post_event(run_id, "run_failed", {"error": last_error}, key="tone-down-failed")
+    await post_event(run_id, "rewrite_failed", {"error": last_error}, key="tone-down-failed")
     raise RuntimeError(last_error)

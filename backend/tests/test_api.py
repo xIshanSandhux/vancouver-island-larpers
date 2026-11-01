@@ -57,12 +57,14 @@ def test_unknown_run_is_a_404_with_the_error_contract(client):
 
 def test_over_length_generate_text_is_rejected_before_render(client):
     res = client.post("/api/runs", json={"mode": "generate", "text": "x" * 281})
-    assert res.status_code == 422  # the contract's own length rule
+    assert res.status_code == 400
+    assert res.json()["code"] == "invalid_input"
 
 
 def test_empty_text_is_rejected(client):
     res = client.post("/api/runs", json={"mode": "generate", "text": "   "})
-    assert res.status_code == 422
+    assert res.status_code == 400
+    assert res.json()["code"] == "invalid_input"
 
 
 def test_check_mode_allows_a_longer_draft(client):
@@ -113,6 +115,18 @@ def test_an_event_updates_the_polled_state(client):
         headers=secret_headers(),
     )
     assert client.get(f"/api/runs/{run_id}").json()["ranking"] == ["v07"]
+
+
+def test_event_payloads_are_validated_before_store_mutation(client):
+    run_id = client.post("/api/runs", json={"mode": "generate", "text": "hi"}).json()["run_id"]
+    response = client.post(
+        f"/internal/runs/{run_id}/events",
+        json={"event_id": "bad", "type": "ranking_ready", "payload": {"ranking": "v07"}},
+        headers=secret_headers(),
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_input"
+    assert client.get(f"/api/runs/{run_id}").json()["ranking"] == []
 
 
 def test_duplicate_events_are_reported_as_duplicates(client):
@@ -178,3 +192,27 @@ def test_tone_down_starts_for_a_scored_completed_draft(client):
     response = client.post(f"/api/runs/{run_id}/tone-down")
     assert response.status_code == 202
     assert response.json() == {"ok": True}
+
+
+def test_rewrite_failure_keeps_the_check_run_completed(client):
+    run_id = client.post("/api/runs", json={"mode": "check", "text": "A useful draft."}).json()["run_id"]
+    headers = secret_headers()
+    for event_id, event_type, payload in (
+        ("started", "run_started", {"mode": "check", "input_text": "A useful draft."}),
+        ("finalists", "finalists_selected", {"finalist_ids": ["draft"]}),
+        ("done", "run_completed", {}),
+    ):
+        client.post(
+            f"/internal/runs/{run_id}/events",
+            json={"event_id": event_id, "type": event_type, "payload": payload},
+            headers=headers,
+        )
+    response = client.post(
+        f"/internal/runs/{run_id}/events",
+        json={"event_id": "rewrite-failed", "type": "rewrite_failed", "payload": {"error": "unsafe rewrite"}},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    state = client.get(f"/api/runs/{run_id}").json()
+    assert state["status"] == "completed"
+    assert state["rewrite_error"] == "unsafe rewrite"

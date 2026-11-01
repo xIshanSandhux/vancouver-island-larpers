@@ -6,15 +6,17 @@ so none of this needs Render or a model key.
 
 import httpx
 import pytest
+from anthropic import APITimeoutError
 
 from workflows.data import chunk
 from workflows.demo_fail import SimulatedFailure, designated_batch_id
 from workflows.events import claim_demo_fail, make_event_id, post_event
-from workflows.llm.anthropic_client import LLMError, extract_json
+from workflows.llm.anthropic_client import LLMError, call_json, extract_json
 from workflows.main import app
 from workflows.tasks.commenters import MAX_COMMENT_CHARS, PersonaReaction, run_commenter_batch
 from workflows.tasks.pipeline import run_pipeline, write_variant_batch
 from workflows.tasks.reality import translate_reality
+from workflows.tasks.tone_down import run_tone_down
 
 
 class FakeCtx:
@@ -195,6 +197,23 @@ async def test_demo_mode_fails_the_designated_batch_once(events, monkeypatch):
     assert ("demo_failure_triggered", {"batch_id": "v01-b1"}) in events
 
 
+async def test_tone_down_emits_rewrite_failure_without_run_failure(events, monkeypatch):
+    async def malformed(**_):
+        return {}
+
+    monkeypatch.setattr("workflows.tasks.tone_down.call_json", malformed)
+    with pytest.raises(RuntimeError):
+        await run_tone_down.func(
+            FakeCtx(),
+            {
+                "run_id": "r-tone",
+                "draft": "I got a coffee and went to a meeting.",
+                "cringe_result": {"rule_score": 10, "reasons": []},
+            },
+        )
+    assert events[-1][0] == "rewrite_failed"
+
+
 async def test_other_batches_never_fail_in_demo_mode(events):
     post = {"post_id": "v01", "voice_id": "v", "voice_label": "V", "text": "t"}
     out = await run_commenter_batch.func(FakeCtx(), "r1", post, ["p01"], "v01-b2", True, "v01-b1")
@@ -208,6 +227,25 @@ async def test_reality_falls_back_instead_of_failing_the_run(monkeypatch):
     monkeypatch.setattr("workflows.tasks.reality.call_json", boom)
     out = await translate_reality.func(FakeCtx(), "r1", "i got a coffee.", {"post_id": "v01", "text": "x"})
     assert "i got a coffee." in out["translation"]
+
+
+async def test_model_timeout_gets_one_explicit_retry(monkeypatch):
+    attempts = 0
+
+    class Messages:
+        async def create(self, **_):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise APITimeoutError(request=httpx.Request("POST", "https://api.anthropic.com"))
+            block = type("Block", (), {"type": "text", "text": '{"ok": true}'})()
+            return type("Message", (), {"stop_reason": None, "content": [block]})()
+
+    client = type("Client", (), {"messages": Messages()})()
+    monkeypatch.setattr("workflows.llm.anthropic_client.get_client", lambda: client)
+    out = await call_json(system="test", user="test", schema=None)
+    assert out == {"ok": True}
+    assert attempts == 2
 
 
 def _async(value):

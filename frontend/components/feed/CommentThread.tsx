@@ -14,7 +14,7 @@ export function CommentThread({ comments, streaming = false }: CommentThreadProp
   const visible = visibleComments(comments);
   const shown = expanded ? visible : previewComments(comments);
   if (visible.length === 0) {
-    return <p className="mt-3 text-xs text-zinc-400">{streaming ? "Audience reactions are arriving…" : "No comments yet."}</p>;
+    return <p className="mt-3 text-xs text-zinc-400">{streaming ? "Reactions are arriving; comments may appear next…" : "No comments yet."}</p>;
   }
   return (
     <div>

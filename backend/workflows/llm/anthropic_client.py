@@ -16,7 +16,7 @@ import logging
 import re
 from typing import Any
 
-from anthropic import APIStatusError, AsyncAnthropic
+from anthropic import APIError, AsyncAnthropic
 
 from app.config import get_settings
 
@@ -42,7 +42,9 @@ def get_client() -> AsyncAnthropic:
         _client = AsyncAnthropic(
             api_key=settings.anthropic_api_key or None,
             timeout=settings.llm_timeout_seconds,
-            max_retries=1,
+            # Retry policy is kept in call_json so malformed output and transient API
+            # errors each receive exactly one controlled retry.
+            max_retries=0,
         )
     return _client
 
@@ -111,17 +113,20 @@ async def call_json(
         try:
             async with get_semaphore():
                 message = await client.messages.create(messages=messages, **kwargs)
-        except APIStatusError as exc:
+        except APIError as exc:
             # 4xx is a bug in our request; retrying it wastes the budget. Carry the
             # API's own message: a silent schema rejection once hid a broken feature
             # behind a fallback for an entire build.
-            if exc.status_code < 500:
+            status_code = getattr(exc, "status_code", None)
+            if status_code is not None and status_code < 500:
                 detail = getattr(exc, "message", "") or str(exc)
-                log.error("model rejected the request (%s): %s", exc.status_code, detail)
-                raise LLMError(f"model rejected the request ({exc.status_code}): {detail}") from exc
+                log.error("model rejected the request (%s): %s", status_code, detail)
+                raise LLMError(f"model rejected the request ({status_code}): {detail}") from exc
             last_error = exc
-            await asyncio.sleep(0.5 * attempt)
-            continue
+            if attempt == 1:
+                await asyncio.sleep(0.5)
+                continue
+            raise LLMError(f"transient model error after one retry: {type(exc).__name__}") from exc
 
         if getattr(message, "stop_reason", None) == "refusal":
             raise LLMRefusal("model declined this input")

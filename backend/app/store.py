@@ -54,8 +54,32 @@ class RunStore:
             self._seen_events[run.run_id] = set()
         return run
 
+    async def create_if_available(
+        self, mode: str, text: str, demo_fail: bool, max_active_runs: int
+    ) -> RunState | None:
+        """Reserve a run slot and create the run under the same lock."""
+        run = RunState(
+            run_id=f"run-{uuid.uuid4().hex[:12]}",
+            mode=mode,
+            status="queued",
+            stage="queued",
+            input_text=text,
+            demo_fail=demo_fail,
+            started_at=_now(),
+            updated_at=_now(),
+        )
+        async with self._lock:
+            self._purge_locked()
+            active = sum(1 for item in self._runs.values() if item.status in ("queued", "running"))
+            if active >= max_active_runs:
+                return None
+            self._runs[run.run_id] = run
+            self._seen_events[run.run_id] = set()
+        return run
+
     async def get(self, run_id: str) -> RunState | None:
         async with self._lock:
+            self._purge_locked()
             return self._runs.get(run_id)
 
     async def active_count(self) -> int:
@@ -131,14 +155,18 @@ class RunStore:
             run.reality = Reality.model_validate(payload)
         elif kind == "rewrite_ready":
             run.rewrite = Rewrite.model_validate(payload)
+            run.rewrite_error = None
+        elif kind == "rewrite_failed":
+            run.rewrite_error = str(payload.get("error", "Tone down failed."))
         elif kind == "demo_failure_triggered":
             run.retries_seen += 1
         elif kind == "run_completed":
             run.status = "completed"
             run.stage = "done"
         elif kind == "run_failed":
-            run.status = "failed"
-            run.error = str(payload.get("error", "unknown error"))
+            if run.status != "completed":
+                run.status = "failed"
+                run.error = str(payload.get("error", "unknown error"))
 
     def _purge_locked(self) -> None:
         cutoff = datetime.now(timezone.utc) - RUN_TTL
