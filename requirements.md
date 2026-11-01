@@ -245,7 +245,7 @@ These turn Q&A answers into facts. Put the numbers in the README or a note.
 **Logistics and contacts:** team formation at 10:30 AM, hacking from 11:00 AM, snacks 1:00 to 2:00, Google workshop 2:30 to 3:30, lunch/dinner 4:30 to 5:00. Questions during the event: hello@larphacks.ca. Announcements are on the event Discord.
 
 **Sponsor perks worth claiming (a few minutes each, none required):**
-- Featherless AI: one month of inference for every participant (promo code is in the participant setup guide). Needed for the commenter model.
+- Featherless AI: dropped. Its API was not working on the day, so every model call goes to Anthropic Claude instead.
 - Render: sponsor notes list **$50 in building credits per hacker**. The LarpHacks redemption code and claim steps were still pending when we signed up, so ask the organizers (Discord or hello@larphacks.ca). After redeeming, check the credit appears in the **workspace you deploy into** before creating paid resources. A successful free deployment does not mean the credit was applied. Free web services sleep after inactivity (cold start), so before the demo move the API and frontend to a paid always-on plan using the credit. Also ask the Render team for a plan or credits if the Hobby compute limit throttles runs.
 - PostHog and Sentry are stretch only.
 
@@ -280,4 +280,4 @@ Expected: a high rule-based cringe score with reasons such as hook phrase, fake 
 
 > **Thought Leadr** lets you LARP as a LinkedIn thought leader. Type something boring ("I got a coffee and went to a meeting"), and it writes 20 posts in 20 voices, picks the three most thought-leader-ish, and tests them on a simulated audience of 50 fictional commenters (a recruiter, the "Agree?" guy, an AI-pivot bro, and more). You get a ranking, a cringe score with reasons, and a reality toggle that shows what actually happened. Paste a real draft in Check mode to see how it reads and get a toned-down rewrite. The simulated audience is a rehearsal tool, not an engagement forecast.
 >
-> **Render Workflows:** every run is a durable task graph: a root task fans out variant-writing and commenter tasks as parallel child runs with automatic retries, results stream to the UI as they finish, and a demo mode injects a failure that Render retries visibly. Stack: Next.js, FastAPI, Python Render Workflows, Claude and Featherless AI.
+> **Render Workflows:** every run is a durable task graph: a root task fans out variant-writing and commenter tasks as parallel child runs with automatic retries, results stream to the UI as they finish, and a demo mode injects a failure that Render retries visibly. Stack: Next.js, FastAPI, Python Render Workflows and Claude.

@@ -34,13 +34,13 @@ The API and the workflow service use the **same root directory** (`backend/`), s
                                                         | Render WORKFLOW: backend/workflows   |
                                                         |  run_pipeline (root)                 |
                                                         |   +-- write_variant_batch  x N (Claude)
-                                                        |   +-- run_commenter_batch  x M (Featherless)
+                                                        |   +-- run_commenter_batch  x M (Claude)      
                                                         |   +-- translate_reality        (Claude)
                                                         |  run_tone_down (root)        (Claude)|
                                                         +--------------------------------------+
                                                                 |                  |
                                                                 v                  v
-                                                          Anthropic API     Featherless AI API
+                                                                Anthropic API
 ```
 
 ### Why events are pushed to the API
@@ -78,8 +78,11 @@ The template for both apps already exists on `main`. Files marked *(template)* e
     workflows/                # Render Workflow service (same root dir as the API)
       main.py                 # Mahir (M1)  app = Workflows(...); registers tasks; app.start()
       events.py               # Mahir (M1)  post_event(), claim_demo_fail()
-      llm/anthropic_client.py # Mahir (M2)
-      llm/featherless_client.py # Ishan (I2)
+      llm/anthropic_client.py # Mahir (M2)  the only model client
+      guardrails.py           # Mahir (M2)  rejects invented facts
+      ranking.py              # Mahir (M3)  scoring + filter_top3
+      demo_fail.py            # Mahir (M7)  the failure switch
+      data.py                 # Mahir (M2)  loaders for data/*.json
       tasks/pipeline.py       # Mahir (M2, M3)  run_pipeline, write_variant_batch, filter_top3
       tasks/reality.py        # Mahir (M4)
       tasks/commenters.py     # Ishan (I2)  run_commenter_batch
@@ -283,7 +286,8 @@ Do this first (M1, then M8): time one trivial chained run to measure startup lat
 **`write_variant_batch(ctx, run_id, input_text, voice_ids)`** (Mahir M2)
 Calls Claude once per voice (concurrently, bounded by `LLM_CONCURRENCY`), using the template in `voices.json`. Validates the guardrails in section 9. Returns `list[Variant]`. Retries a voice once on a guardrail failure with a stricter instruction before dropping that voice.
 
-**`run_commenter_batch(ctx, run_id, post, persona_ids, batch_id)`** (Ishan I2)
+**`run_commenter_batch(ctx, run_id, post, persona_ids, batch_id, demo_fail, designated_batch)`** (Ishan I2)
+The last two arguments carry the demo switch; keep the `maybe_fail(...)` call as the first line (section 6).
 1. If this run has the demo switch on and this is the designated batch (section 6), claim the failure and raise.
 2. For each persona, concurrently, call the commenter provider. Validate the strict JSON schema in section 11. On invalid JSON retry once with a "return only JSON" reminder; on a second failure record `action: "ignore"`, `appeal: 3`, `cringe_flag: false` and log a warning.
 3. Post a `comment` event per persona as soon as it is done.
@@ -409,12 +413,16 @@ Rules: `comment` is non-null only when `action` is `comment` (max 140 chars). `a
 
 ## 12. Models and providers
 
-| Use | Provider | Env var for model | Notes |
-|---|---|---|---|
-| Post variants, reality translation, tone-down rewrite | Anthropic | `CLAUDE_MODEL` (default `claude-haiku-5-5`) | Fast, structured. Raise to `claude-sonnet-5-5` if variant quality is poor and latency allows. |
-| Commenter personas | Featherless AI (OpenAI-compatible) | `FEATHERLESS_MODEL` | Pick a small instruct model. **VERIFY** the base URL (`FEATHERLESS_BASE_URL`, expected `https://api.featherless.ai/v1`) and model id in the Featherless dashboard. Participants get a free month through the event's participant setup guide / promo code. |
+| Use | Model | Notes |
+|---|---|---|
+| Post variants, reality translation, tone-down rewrite, commenter personas | `CLAUDE_MODEL` (default `claude-haiku-5-5`) | One provider for everything. Featherless was dropped: its API was not working on the day. |
 
-**Risk: Featherless concurrency.** Featherless limits concurrent requests by plan. 50+ calls in parallel may queue or fail. Mitigations: the `LLM_CONCURRENCY` semaphore, backoff on 429, and a switch `COMMENTER_PROVIDER=featherless|anthropic` that sends the same commenter prompts to Claude instead. Test Featherless concurrency in the first hour (I2) and switch if it is too slow. The demo does not depend on which provider answers.
+**Three things about this API version, all verified against the installed SDK (`anthropic` 2.3.0):**
+- There is **no `temperature`** parameter. Sending one is a 400. Persona variety has to come from the persona card and the prompt, not from sampling.
+- Haiku 5.5 runs **thinking by default** and bills it as output. We send `thinking: {"type": "disabled"}`, which it accepts at effort `high` or below, with `LLM_EFFORT=low`. This is the main cost lever.
+- **Structured outputs** are available (`output_config.format`) and are on by default, so replies are schema-valid JSON. `LLM_STRUCTURED_OUTPUTS=false` turns them off without a code change; the client parses and validates either way.
+
+**Budget.** The account holds a small prepaid balance with a monthly spend limit set in the Console, and auto-reload off, so the app simply stops rather than overspending. Haiku 5.5 is about $0.10 per million input tokens and $0.50 per million output, so a generate run costs roughly two cents. Rate limits on this account are far above what one run needs, so personas stay one call each rather than being batched.
 
 Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 171 model calls. Per check run: 50 commenters + optional 1 rewrite.
 
@@ -439,8 +447,7 @@ Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 1
 | `CORS_ORIGINS` | API | comma-separated allowed origins (the frontend URL) |
 | `WEB_BASE_URL` | workflow | public URL of the API, e.g. `https://thought-leadr-api.onrender.com` |
 | `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | workflow | Claude |
-| `FEATHERLESS_API_KEY`, `FEATHERLESS_BASE_URL`, `FEATHERLESS_MODEL` | workflow | Featherless |
-| `COMMENTER_PROVIDER` | workflow | `featherless` (default) or `anthropic` |
+| `LLM_EFFORT`, `LLM_THINKING_DISABLED`, `LLM_STRUCTURED_OUTPUTS` | workflow | cost and reliability levers (section 12) |
 | `VARIANT_BATCHES`, `COMMENTER_BATCHES_PER_POST`, `LLM_CONCURRENCY` | workflow | optional overrides for section 5.1 |
 | `MAX_ACTIVE_RUNS`, `MAX_RUNS_PER_HOUR` | API | abuse guard (section 10) |
 | `SENTRY_DSN` | both | stretch (I9) |
@@ -471,7 +478,7 @@ Rules: secrets live only in Render environment settings and local `.env` files. 
 |---|---|---|
 | Task startup latency or per-minute compute cap on Hobby | Run takes too long, chained runs fail | Measure in the first hour. Reduce `*_BATCHES`. Ask Render staff about credits or a higher plan at the event. |
 | Judges or attendees spam the public app during judging | Budget and Render limits exhausted before your slot | Abuse guard (section 10), busy message, keep the URL out of public channels until your slot |
-| Featherless concurrency limits | Commenters slow or 429 | Semaphore plus `COMMENTER_PROVIDER=anthropic` fallback |
+| Anthropic rate limits or spend cap | Commenters stall mid-demo | `LLM_CONCURRENCY` semaphore; spend limit set in the Console; watch the balance before the demo |
 | Model returns invalid JSON | Missing comments | Pydantic validation, one reminder retry, then default result |
 | Prompt injection or offensive input on a public demo | Embarrassing output on stage | Delimited user text, blocklist, invalid-answer checks (section 9) |
 | API restarts mid-demo | In-memory runs lost | One instance, always-on plan, no deploys during the demo window |
