@@ -23,8 +23,13 @@ def test_personas_have_required_distribution_and_ranges():
         "corporate_comms_exec",
     }
     for persona in personas:
-        assert 1 <= persona["hype_tolerance"] <= 5
-        assert 1 <= persona["cynicism"] <= 5
+        # Both traits are integers on a 0-5 scale. Zero is a real value, not a slip:
+        # three of the great_post_bot personas have no cynicism at all, which is the
+        # point of that archetype.
+        assert isinstance(persona["hype_tolerance"], int)
+        assert isinstance(persona["cynicism"], int)
+        assert 0 <= persona["hype_tolerance"] <= 5
+        assert 0 <= persona["cynicism"] <= 5
         assert 0 <= persona["like_bias"] <= 1
         assert all(persona[field] for field in ("name", "label", "industry", "bio", "comment_style"))
 
