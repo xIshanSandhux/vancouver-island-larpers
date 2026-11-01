@@ -23,6 +23,7 @@ def clean_state(monkeypatch):
         return "trn-test"
 
     monkeypatch.setattr("app.routes.runs.start_run", fake_start_run)
+    monkeypatch.setattr("app.routes.tone_down.start_run", fake_start_run)
     yield
 
 
@@ -135,3 +136,45 @@ def test_demo_fail_claim_answers_once(client):
 def test_demo_fail_claim_needs_the_secret(client):
     run_id = client.post("/api/runs", json={"mode": "generate", "text": "hi", "demo_fail": True}).json()["run_id"]
     assert client.post(f"/internal/runs/{run_id}/demo-fail-claim").status_code == 401
+
+
+def test_tone_down_requires_a_completed_check_run(client):
+    unknown = client.post("/api/runs/nope/tone-down")
+    assert unknown.status_code == 404
+    run_id = client.post("/api/runs", json={"mode": "generate", "text": "hi"}).json()["run_id"]
+    wrong_mode = client.post(f"/api/runs/{run_id}/tone-down")
+    assert wrong_mode.status_code == 400
+
+
+def test_tone_down_starts_for_a_scored_completed_draft(client):
+    run_id = client.post("/api/runs", json={"mode": "check", "text": "A useful draft."}).json()["run_id"]
+    headers = secret_headers()
+    client.post(
+        f"/internal/runs/{run_id}/events",
+        json={"event_id": "started", "type": "run_started", "payload": {"mode": "check", "input_text": "A useful draft."}},
+        headers=headers,
+    )
+    client.post(
+        f"/internal/runs/{run_id}/events",
+        json={"event_id": "finalists", "type": "finalists_selected", "payload": {"finalist_ids": ["draft"]}},
+        headers=headers,
+    )
+    client.post(
+        f"/internal/runs/{run_id}/events",
+        json={
+            "event_id": "score",
+            "type": "cringe_scored",
+            "payload": {
+                "post_id": "draft",
+                "engagement_rate": 0.5,
+                "appeal_mean": 3,
+                "cringe": {"post_id": "draft", "rule_score": 20, "llm_score": None, "score": 20, "reasons": []},
+                "base_score": 50,
+            },
+        },
+        headers=headers,
+    )
+    client.post(f"/internal/runs/{run_id}/events", json={"event_id": "done", "type": "run_completed", "payload": {}}, headers=headers)
+    response = client.post(f"/api/runs/{run_id}/tone-down")
+    assert response.status_code == 202
+    assert response.json() == {"ok": True}

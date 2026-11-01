@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # Anthropic is the only model provider (architecture.md section 12).
     anthropic_api_key: str = ""
     claude_model: str = "claude-haiku-5-5"
+    commenter_model: str = "claude-haiku-5-5"
     # Effort and thinking are the cost levers. Haiku 5.5 accepts thinking "disabled"
     # only at effort "high" or below, and rejects temperature outright.
     llm_effort: str = "low"

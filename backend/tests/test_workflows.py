@@ -36,8 +36,12 @@ def events(monkeypatch):
     async def fake_post_event(run_id, event_type, payload=None, **_):
         captured.append((event_type, payload or {}))
 
-    for module in ("pipeline", "commenters", "reality"):
+    for module in ("pipeline", "commenters", "reality", "tone_down"):
         monkeypatch.setattr(f"workflows.tasks.{module}.post_event", fake_post_event, raising=False)
+    async def fake_commenter_call_json(*, system, user, schema=None, max_tokens=1024, model=None):
+        return {"action": "comment", "comment": "A useful reminder to keep it practical.", "appeal": 4, "cringe_flag": False}
+
+    monkeypatch.setattr("workflows.tasks.commenters.call_json", fake_commenter_call_json)
     monkeypatch.setattr("workflows.demo_fail.post_event", fake_post_event)
     return captured
 
@@ -57,7 +61,7 @@ def fake_llm(monkeypatch):
 
 def test_tasks_are_registered():
     names = app._registry.get_task_names()
-    for task in ("run_pipeline", "write_variant_batch", "run_commenter_batch", "translate_reality"):
+    for task in ("run_pipeline", "write_variant_batch", "run_commenter_batch", "translate_reality", "run_tone_down"):
         assert task in names
 
 
