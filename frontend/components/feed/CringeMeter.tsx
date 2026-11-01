@@ -18,18 +18,20 @@ export function CringeMeter({ cringe }: CringeMeterProps) {
       <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
         <div className="h-full bg-amber-500 transition-[width] duration-500" style={{ width: `${width}%` }} />
       </div>
-      <details className="mt-2 text-xs text-zinc-500">
-        <summary className="cursor-pointer">Why this score?</summary>
+      <details className="mt-2 text-xs text-zinc-500" open={cringe.reasons.length > 0}>
+        <summary className="cursor-pointer font-medium text-zinc-700 dark:text-zinc-300">Why this score?</summary>
         <p className="mt-2">60% wording signals + 40% of the simulated audience flagging cringe. These signals describe phrasing, not your sincerity.</p>
-      {cringe.reasons.length > 0 && (
-        <ul className="mt-2 space-y-1 text-xs text-zinc-500">
-          {cringe.reasons.slice(0, 5).map((reason) => (
-            <li key={reason.id}>
-              {reason.label} <span className="text-zinc-400">+{reason.points}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+        {cringe.reasons.length > 0 ? (
+          <ul className="mt-2 space-y-1 text-zinc-600 dark:text-zinc-400">
+            {cringe.reasons.slice(0, 5).map((reason) => (
+              <li key={reason.id}>
+                <span className="font-medium">{reason.label}</span> <span className="text-zinc-400">+{reason.points}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2">No strong cringe signals found.</p>
+        )}
       </details>
     </section>
   );

@@ -9,7 +9,7 @@ import type { RunMode, RunState } from "./contracts";
 const POLL_MS = 1000;
 const TIMEOUT_MS = 120_000;
 
-export type RunPhase = "idle" | "starting" | "running" | "done" | "error";
+export type RunPhase = "idle" | "starting" | "running" | "done" | "error" | "timeout";
 
 export interface UseRun {
   phase: RunPhase;
@@ -60,8 +60,8 @@ export function useRun(): UseRun {
         runId = await startRun(mode, text, demoFail);
       } catch (err) {
         const known = err instanceof RunRequestError;
-        setError(known ? err.message : "Could not reach the server.");
-        setErrorCode(known ? err.code : "internal");
+        setError(known ? err.message : "Could not reach the backend. Check that the API is running and try again.");
+        setErrorCode(known ? err.code : "backend_down");
         setPhase("error");
         return;
       }
@@ -83,18 +83,18 @@ export function useRun(): UseRun {
             return setPhase("error");
           }
           if (Date.now() > deadline) {
-            setError("This run took too long. Try again.");
-            setErrorCode("internal");
-            return setPhase("error");
+            setError("This run took longer than two minutes. Try again with the example input.");
+            setErrorCode("timeout");
+            return setPhase("timeout");
           }
           timer.current = setTimeout(poll, POLL_MS);
         } catch {
           // A single failed poll is usually a blip; keep trying until the deadline.
           if (cancelled.current) return;
           if (Date.now() > deadline) {
-            setError("Lost contact with the server.");
-            setErrorCode("internal");
-            return setPhase("error");
+            setError("Lost contact with the backend while waiting for the result.");
+            setErrorCode("timeout");
+            return setPhase("timeout");
           }
           timer.current = setTimeout(poll, POLL_MS);
         }

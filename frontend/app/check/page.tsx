@@ -7,6 +7,7 @@ import { FeedShell } from "@/components/feed/FeedShell";
 import { getRun, RunRequestError, startToneDown } from "@/lib/api";
 import { CHECK_MAX_CHARS, type RunState } from "@/lib/contracts";
 import { useRun } from "@/lib/useRun";
+import { inputError, rewritePollDecision, runErrorTitle } from "@/lib/ui";
 
 const EXAMPLE_DRAFT =
   "I used to think consistency was boring. Then I started showing up every week, listening to customers, and making one small improvement at a time. The results were quieter than a breakthrough, but they lasted longer.";
@@ -31,6 +32,7 @@ export default function CheckPage() {
     [displayRun, text],
   );
   const busy = phase === "starting" || phase === "running" || rewritePending;
+  const validationMessage = inputError(text, CHECK_MAX_CHARS);
 
   useEffect(() => {
     if (!rewritePending || !run) return;
@@ -43,14 +45,20 @@ export default function CheckPage() {
         const state = await getRun(run.run_id);
         if (cancelled) return;
         setRewriteRun(state);
-        if (state.rewrite || state.status === "failed") {
+        const decision = rewritePollDecision(state, Date.now(), deadline);
+        if (decision === "ready") {
           setRewritePending(false);
-          if (state.status === "failed") setRewriteError(state.error ?? "Tone down failed.");
+          setRewriteError(null);
           return;
         }
-        if (Date.now() >= deadline) {
+        if (decision === "failed") {
           setRewritePending(false);
-          setRewriteError("The rewrite took too long. Try again.");
+          setRewriteError(state.rewrite_error ?? state.error ?? "Tone down failed. The original draft is unchanged.");
+          return;
+        }
+        if (decision === "timeout") {
+          setRewritePending(false);
+          setRewriteError("The rewrite took too long. The original draft is unchanged; try again.");
           return;
         }
         timer = setTimeout(() => void pollRewrite(), 1000);
@@ -73,6 +81,7 @@ export default function CheckPage() {
   }, [rewritePending, run]);
 
   const submit = () => {
+    if (validationMessage) return;
     setRewriteRun(null);
     setRewriteError(null);
     void start("check", text, false);
@@ -109,6 +118,8 @@ export default function CheckPage() {
         id="draft"
         value={text}
         maxLength={CHECK_MAX_CHARS}
+        aria-describedby="draft-hint"
+        aria-invalid={Boolean(validationMessage)}
         onChange={(event) => setText(event.target.value)}
         disabled={busy}
         rows={10}
@@ -121,6 +132,9 @@ export default function CheckPage() {
           Try an example
         </button>
       </div>
+      <p id="draft-hint" className={`mt-2 text-xs ${validationMessage ? "text-amber-700 dark:text-amber-300" : "text-zinc-500"}`}>
+        {validationMessage ?? "Paste a real draft and the simulated audience will explain how it reads."}
+      </p>
       <button
         type="button"
         onClick={submit}
@@ -130,15 +144,15 @@ export default function CheckPage() {
         Check post
       </button>
 
-      {phase === "error" && (
+      {(phase === "error" || phase === "timeout") && (
         <section className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-          <p className="text-sm font-medium text-red-900 dark:text-red-200">{errorCode === "busy" ? "The demo is busy" : "That did not work"}</p>
+          <p className="text-sm font-medium text-red-900 dark:text-red-200">{runErrorTitle(errorCode)}</p>
           <p className="mt-1 text-sm text-red-800 dark:text-red-300">{error}</p>
           <button type="button" onClick={() => { reset(); submit(); }} className="mt-3 rounded-lg bg-red-900 px-4 py-1.5 text-xs font-medium text-white">Try again</button>
         </section>
       )}
-      {phase === "starting" && <p className="mt-4 text-sm text-zinc-500">Starting the check…</p>}
-      {run && phase === "running" && <p className="mt-4 text-sm text-zinc-500">{run.stage === "commenting" ? "The simulated audience is reacting…" : `Workflow stage: ${run.stage}`}</p>}
+      {phase === "starting" && <p className="mt-4 rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300" role="status">Starting the check…</p>}
+      {run && phase === "running" && <p className="mt-4 rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300" role="status">{run.status === "queued" ? "Your check is queued. The audience will join shortly." : run.stage === "commenting" ? "The simulated audience is reacting…" : `Workflow stage: ${run.stage}`}</p>}
 
       {displayRun && (
         <div className="mt-6 space-y-4">
@@ -148,8 +162,13 @@ export default function CheckPage() {
               Tone down this draft
             </button>
           )}
-          {rewritePending && <p className="text-sm text-zinc-500">Rewriting the draft while keeping its facts…</p>}
-          {rewriteError && <p className="text-sm text-red-700 dark:text-red-300">{rewriteError}</p>}
+          {rewritePending && <p className="text-sm text-zinc-500" role="status">Rewriting the draft while keeping its facts…</p>}
+          {rewriteError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+              <p>{rewriteError}</p>
+              {phase === "done" && <button type="button" onClick={() => void requestToneDown()} className="mt-2 font-medium underline underline-offset-2">Try tone down again</button>}
+            </div>
+          )}
           {displayRun.rewrite && (
             <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
               <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">A more grounded version</h2>

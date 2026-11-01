@@ -11,6 +11,7 @@ import { DEFAULT_TONE_WEIGHT } from "@/lib/rank";
 import { finalistOrder } from "@/lib/finalists";
 import { FeedShell } from "@/components/feed/FeedShell";
 import { useRun } from "@/lib/useRun";
+import { runErrorTitle } from "@/lib/ui";
 
 /** We open on the title card, run the demo, then come back to it to close. */
 type Scene = "intro" | "demo" | "outro";
@@ -93,10 +94,10 @@ export default function GeneratePage() {
         busy={busy}
       />
 
-      {phase === "error" && (
+      {(phase === "error" || phase === "timeout") && (
         <section className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
           <p className="text-sm font-medium text-red-900 dark:text-red-200">
-            {errorCode === "busy" ? "The demo is busy" : "That did not work"}
+            {runErrorTitle(errorCode)}
           </p>
           <p className="mt-1 text-sm text-red-800 dark:text-red-300">{error}</p>
           <button
@@ -113,7 +114,15 @@ export default function GeneratePage() {
       )}
 
       {phase === "starting" && (
-        <p className="mt-4 text-sm text-zinc-500">Starting the workflow…</p>
+        <p className="mt-4 rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300" role="status">
+          Starting the workflow…
+        </p>
+      )}
+
+      {phase === "running" && run?.status === "queued" && (
+        <p className="mt-4 rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300" role="status">
+          Your rehearsal is queued. The audience will join shortly.
+        </p>
       )}
 
       {run && (
@@ -152,14 +161,16 @@ export default function GeneratePage() {
       </FeedShell>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setScene("outro")}
-        title="Back to the title card (Esc)"
-        className="fixed bottom-4 right-4 z-40 rounded-full border border-zinc-300 bg-white/90 px-4 py-2 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur transition hover:border-zinc-900 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:border-zinc-300 dark:hover:text-zinc-100"
-      >
-        Team
-      </button>
+      {scene === "demo" && (
+        <button
+          type="button"
+          onClick={() => setScene("outro")}
+          title="Back to the title card (Esc)"
+          className="fixed bottom-4 right-4 z-40 rounded-full border border-zinc-300 bg-white/90 px-4 py-2 text-xs font-medium text-zinc-700 shadow-lg backdrop-blur transition hover:border-zinc-900 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:border-zinc-300 dark:hover:text-zinc-100"
+        >
+          Team
+        </button>
+      )}
     </>
   );
 }

@@ -57,7 +57,7 @@ npm run dev                               # http://localhost:3000
 npm run lint && npm run typecheck && npm test
 ```
 
-Local development without Render: the frontend can render from sample JSON (`NEXT_PUBLIC_USE_SAMPLES=true`), so UI work does not wait on the backend. Workflow task logic is exercised in `pytest` by calling the inner functions directly with a fake event poster. The workflow service starts with `render-workflows workflows.main:app` (run from `backend/`). How to run it locally against a real Render task server is still **VERIFY**: use `render workflows init` output as a reference; tests call task bodies directly (`task.func(None, ...)`).
+Local development without Render: the frontend can render from sample JSON (`NEXT_PUBLIC_USE_SAMPLES=true`), so UI work does not wait on the backend. Workflow task logic is exercised in `pytest` by calling the inner functions directly with a fake event poster. The workflow service starts with `render-workflows workflows.main:app` (run from `backend/`). For a local Render task server, use the current CLI form `render workflows dev -- <command>`; direct task-body tests remain the reliable local verification path.
 
 ## 5. Before every PR
 

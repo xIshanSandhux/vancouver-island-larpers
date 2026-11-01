@@ -2,7 +2,7 @@
 
 Read `requirements.md` first for what the product does and why. This file says how it is built. `agents.md` says who builds which part.
 
-Items marked **VERIFY** are things I could only confirm from secondary documentation. Check them against the current Render docs (https://render.com/docs/workflows) before relying on them.
+Render-specific limits and SDK settings below were checked against the current Render Workflows documentation on 2026-11-01.
 
 ## 1. System overview
 
@@ -47,7 +47,7 @@ The API and the workflow service use the **same root directory** (`backend/`), s
 
 - A workflow task run only returns its result **when it finishes**. A user watching a comment section needs results as they happen.
 - Task runs **cannot receive incoming connections**, but they can make outgoing ones. So tasks POST progress events to the API, and the browser polls the API.
-- This also avoids polling the Render API every second. Root-level Render API calls are rate limited (50 per minute on Hobby, **VERIFY**).
+- This also avoids polling the Render API every second. Root-level Render API calls are rate limited to 50 per minute on Hobby and 1500 per minute on Pro or higher.
 - The API holds run state in memory. There is no database. That is deliberate for a 7-hour build.
 - Event delivery is idempotent. Every event has an `event_id`, and the store ignores a repeat. Render retries failed tasks, and a retried task re-sends events.
 - The API also watches the started task run (`await` on the SDK's awaitable run). If the root run fails or is cancelled without posting `run_failed`, the API marks the run failed so the UI never hangs.
@@ -178,7 +178,7 @@ type RunEvent = {
   type:
     | "run_started" | "stage" | "variants_ready" | "finalists_selected"
     | "comment" | "cringe_scored" | "ranking_ready" | "reality_ready"
-    | "rewrite_ready" | "demo_failure_triggered" | "run_completed" | "run_failed";
+    | "rewrite_ready" | "rewrite_failed" | "demo_failure_triggered" | "run_completed" | "run_failed";
   payload: unknown;        // shape depends on type, see 3.3
 };
 
@@ -198,6 +198,7 @@ type RunState = {
   ranking: string[];               // post_ids, best first (server default tone weight)
   reality: Reality | null;
   rewrite: Rewrite | null;
+  rewrite_error: string | null;
   retries_seen: number;            // count of demo_failure_triggered events
   error: string | null;
   started_at: string;              // ISO
@@ -221,6 +222,7 @@ type ApiError = { error: string; code: "busy" | "invalid_input" | "render_unavai
 | ranking_ready | `{ ranking: string[] }` |
 | reality_ready | `Reality` |
 | rewrite_ready | `Rewrite` |
+| rewrite_failed | `{ error: string }` |
 | demo_failure_triggered | `{ batch_id: string }` |
 | run_completed | `{}` |
 | run_failed | `{ error: string }` |
@@ -234,7 +236,7 @@ CORS allows only the origins in `CORS_ORIGINS` (the frontend URL). Errors use th
 | `GET /health` | anyone | `{"status": "ok"}` (template, already implemented) |
 | `POST /api/runs` | browser | Validates `RunRequest` (length limits, section 9). Runs the abuse guard (section 10). Creates `run_id` (uuid4), `RunState` with status `queued`. Calls `RenderAsync().workflows.start_task("<workflow-slug>/run_pipeline", [{run_id, mode, text, demo_fail}])`, stores `task_run_id`, starts the watcher. Returns `{run_id}`. If Render throws, mark the run failed and return 502 `render_unavailable`. |
 | `GET /api/runs/{id}` | browser | Returns the full `RunState`. 404 for unknown ids. The browser polls about every 1000 ms until `status` is `completed` or `failed`, with a hard stop at 120 s. |
-| `POST /api/runs/{id}/tone-down` | browser | Check mode only. Starts `run_tone_down` for the draft. The result arrives as a `rewrite_ready` event. |
+| `POST /api/runs/{id}/tone-down` | browser | Check mode only. Starts `run_tone_down` for the draft. The result arrives as `rewrite_ready`; a failed retry arrives as `rewrite_failed` while the original Check run stays completed. |
 | `POST /internal/runs/{id}/events` | workflow tasks only | Requires `Authorization: Bearer ${WORKFLOW_EVENT_SECRET}` (constant-time compare). Body is one `RunEvent` without `seq`. Applies it to the run if the `event_id` has not been seen. Returns `{ok: true, duplicate: bool}`. |
 | `POST /internal/runs/{id}/demo-fail-claim` | workflow tasks only | Same auth. Atomically returns `{fail: true}` the **first** time it is called for a run with `demo_fail` set, otherwise `{fail: false}`. Used by the failure switch (section 6). |
 
@@ -251,7 +253,7 @@ All tasks use the Render Python SDK (PyPI package `render`, v1.6, confirmed; `re
 - Retry settings are `Retry(max_retries, wait_duration_ms, backoff_scaling=1.5)` (confirmed). `TaskContext` exposes run ids, not the attempt number, which is why the failure switch asks the API (section 6).
 - Tasks take JSON-serialisable arguments, so tasks receive plain dicts. In tests call the task body directly with `task_definition.func(ctx, ...)`.
 - A task slug has the form `{workflow-slug}/{task-name}`.
-- Limits: a Hobby workspace can start new compute at about 16 CPU per minute (more on Pro). Chained runs over the limit **fail at `ctx.run()`**. Total arguments per run are capped at 4 MB. Up to 1,000 chained runs per minute. **VERIFY** against https://render.com/docs/workflows-limits.
+- Limits: a Hobby workspace can start up to 16 CPU and 64 GB RAM of new task compute per minute; Pro or higher allows 32 CPU and 128 GB RAM. Chained runs are limited to 1,000 per minute, root-level runs are limited to 50 requests per minute on Hobby, and total task arguments are capped at 4 MB. If a chained run is rate limited, `ctx.run()` fails rather than queueing it. See https://render.com/docs/workflows-limits.
 
 ### 5.1 Granularity (the main performance decision)
 
@@ -303,7 +305,7 @@ Root task for check mode; the API passes `{run_id, draft, cringe_result}` as the
 
 Durability story for the Render judges:
 
-- Every task has `Retry(max_retries=2, wait_duration_ms=1000, backoff_scaling=1.5)` (**VERIFY** parameter names).
+- Every task has `Retry(max_retries=2, wait_duration_ms=1000, backoff_scaling=1.5)`; these are the current Python SDK parameter names.
 - A task run is retried on an exception, a timeout, or an instance error.
 - Event posting is idempotent (`event_id`), so a retried batch can safely re-send.
 - Side effects live in child tasks and are keyed (the `event_id`).
@@ -431,7 +433,7 @@ Rules: `comment` is non-null only when `action` is `comment` (max 140 chars). `a
 
 **Budget.** The account holds a small prepaid balance with a monthly spend limit set in the Console, and auto-reload off, so the app simply stops rather than overspending. Haiku 5.5 is about $0.10 per million input tokens and $0.50 per million output, so a generate run costs roughly two cents. Rate limits on this account are far above what one run needs, so personas stay one call each rather than being batched.
 
-Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 171 model calls. Per check run: 50 commenters + optional 1 rewrite.
+Call budget per generate run: 20 variants + up to 8 grounding reviews + 150 commenters + 1 reality = about 179 model calls before retries. Per check run: 50 commenters + optional 1 rewrite. Actual counts vary when retries or grounded fallbacks are needed.
 
 ## 13. Environment variables
 
@@ -448,7 +450,7 @@ Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 1
 
 | Var | Used by | Purpose |
 |---|---|---|
-| `RENDER_API_KEY` | API | lets the Render SDK start task runs (**VERIFY** where to create it) |
+| `RENDER_API_KEY` | API | lets the Render SDK start task runs; create it under Account Settings → API Keys in the Render Dashboard |
 | `RENDER_WORKFLOW_SLUG` | API | the workflow service slug, used to build `{slug}/run_pipeline` |
 | `WORKFLOW_EVENT_SECRET` | both | shared secret for the internal endpoints |
 | `CORS_ORIGINS` | API | comma-separated allowed origins (the frontend URL) |
@@ -464,8 +466,8 @@ Rules: secrets live only in Render environment settings and local `.env` files. 
 ## 14. Deployment on Render (Mahir M1)
 
 1. **Frontend web service.** Root directory `frontend`, build `npm install && npm run build`, start `npm run start`. Set `NEXT_PUBLIC_API_URL` to the API's URL **before** building (it is baked in at build time).
-2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set the Python version to 3.11 (an env var or a `.python-version` file; **VERIFY**, the SDK needs a recent Python). Health check path `/health`.
-3. **Workflow service.** Create it in the dashboard (Workflows are not replicated by Blueprints, per the docs, so do not rely on `render.yaml` for this). Root directory `backend`, build `pip install -r requirements.txt`, start command `render-workflows workflows.main:app`. Set env vars (section 13). Still **VERIFY** in the dashboard: that the root directory setting works as expected for "My own workflow".
+2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set `PYTHON_VERSION=3.11` or add `.python-version` in the service root. Health check path `/health`.
+3. **Workflow service.** Create it in the dashboard or with the Render CLI. Root directory `backend`, build `pip install -r requirements.txt`, start command `render-workflows workflows.main:app`. Set env vars (section 13). Render supports workflow services in Blueprints, but preview replication is not supported; this project keeps the three-service setup documented manually.
 4. Use always-on instances for the API and frontend (or ping them before the demo), so there is no cold start while presenting.
 5. Deploy the minimal round trip first: `POST /api/runs` starts `run_pipeline`, which posts `run_started` and `run_completed`; the browser sees the run complete. Confirm this before building anything else.
 6. Auto-deploy from `main`. Because of this, **never push a broken `main`** (see `agents.md`).

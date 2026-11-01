@@ -107,6 +107,7 @@ EventType = Literal[
     "ranking_ready",
     "reality_ready",
     "rewrite_ready",
+    "rewrite_failed",
     "demo_failure_triggered",
     "run_completed",
     "run_failed",
@@ -152,6 +153,10 @@ class RunFailedPayload(BaseModel):
     error: str
 
 
+class RewriteFailedPayload(BaseModel):
+    error: str
+
+
 class EmptyPayload(BaseModel):
     pass
 
@@ -166,6 +171,7 @@ EVENT_PAYLOADS: dict[str, type[BaseModel]] = {
     "ranking_ready": RankingReadyPayload,
     "reality_ready": Reality,
     "rewrite_ready": Rewrite,
+    "rewrite_failed": RewriteFailedPayload,
     "demo_failure_triggered": DemoFailurePayload,
     "run_completed": EmptyPayload,
     "run_failed": RunFailedPayload,
@@ -193,6 +199,7 @@ class RunState(BaseModel):
     ranking: list[str] = Field(default_factory=list)
     reality: Reality | None = None
     rewrite: Rewrite | None = None
+    rewrite_error: str | None = None
     retries_seen: int = 0
     error: str | None = None
     started_at: str

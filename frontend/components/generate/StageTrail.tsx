@@ -41,6 +41,7 @@ export function StageTrail({ run }: { run: RunState }) {
       </ol>
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+        {run.stage === "queued" && <span className="rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">Queued to start</span>}
         {run.stage === "commenting" && (
           <span className="tabular-nums">
             {reacted} of {expected} reactions in
