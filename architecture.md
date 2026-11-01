@@ -334,7 +334,7 @@ Rule features (case-insensitive; lexicons in `data/cringe_lexicon.json`). Points
 | id | Detects | Points |
 |---|---|---|
 | `one_line_paragraphs` | share of lines that are a single short sentence (<= 12 words) separated by blank lines; points = 12 x share | up to 12 |
-| `hook_phrase` | "unpopular opinion", "nobody talks about", "here's the truth", "I was fired", "stop doing", "harsh truth" | 10 |
+| `hook_phrase` | "unpopular opinion", "nobody talks about", "here's the truth", "I was fired", "stop scrolling", "stop doing", "harsh truth" | 10 |
 | `engagement_bait` | ending with "Agree?", "Thoughts?", "Repost if", "Follow for more" | 10 |
 | `humblebrag` | "humbled", "honored", "thrilled to announce", "grateful", "blessed" (2 pts each, cap 12) | up to 12 |
 | `hashtags` | more than 3 hashtags (1 pt each beyond 3, cap 8) | up to 8 |
@@ -402,6 +402,8 @@ The deployed API will be public and judges may try it during judging, while real
 ```
 
 10 archetypes, 5 variations each: `recruiter`, `agree_guy` (engagement farmer), `ai_pivot_bro` (was crypto, now AI), `great_post_bot`, `skeptical_senior_eng`, `laid_off_job_seeker`, `hustle_founder`, `hr_people_ops`, `quiet_lurker`, `corporate_comms_exec`. Variations differ in industry, seniority, mood and tolerance for hype.
+
+Field ranges: `hype_tolerance` and `cynicism` are integers from **0 to 5** (0 is allowed and meaningful: a `great_post_bot` has no cynicism), and `like_bias` is a float from 0 to 1. These values are interpolated into the persona's system prompt, so they steer tone rather than being used in any calculation.
 
 Commenter prompt: the system message sets the persona and says "react as this person would scrolling their feed; be brief; no real people". The user message has the post inside delimiters. The model must return **only** this JSON:
 
