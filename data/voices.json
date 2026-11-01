@@ -7,7 +7,7 @@
   {
     "id": "hot_take",
     "label": "Hot take",
-    "instruction": "Open with a contrarian claim about the industry drawn from the event. Be confident and slightly combative. Short, punchy lines."
+    "instruction": "Open with 'Hot take:' and challenge the importance people attach to this event. Be confident and slightly combative. Short, punchy lines. Do not use 'Unpopular opinion' or invent an industry context."
   },
   {
     "id": "story_time",

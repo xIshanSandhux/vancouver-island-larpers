@@ -284,7 +284,7 @@ Do this first (M1, then M8): time one trivial chained run to measure startup lat
 8. Post `run_completed`. On any unrecovered exception post `run_failed` and re-raise.
 
 **`write_variant_batch(ctx, run_id, input_text, voice_ids)`** (Mahir M2)
-Calls Claude once per voice (concurrently, bounded by `LLM_CONCURRENCY`), using the template in `voices.json`. Validates the guardrails in section 9. Returns `list[Variant]`. Retries a voice once on a guardrail failure with a stricter instruction before dropping that voice.
+Calls Claude once per voice (concurrently, bounded by `LLM_CONCURRENCY`), using the template in `voices.json`. Checks 40–140 words, reserved voice openings, names and numbers. A separate batch review checks for invented biographical details; malformed or incomplete reviews fail closed. Rejected voices get one rewrite attempt. Remaining failures use explicitly labelled, voice-specific grounded fallbacks containing the original event and generic rhetorical framing, keeping all 20 voices available. Model review reduces factual drift but is not a proof of truth. The default four batches add four review calls, with up to four more on retries, so the old 171-call estimate excludes this review overhead.
 
 **`run_commenter_batch(ctx, run_id, post, persona_ids, batch_id, demo_fail, designated_batch)`** (Ishan I2)
 The last two arguments carry the demo switch; keep the `maybe_fail(...)` call as the first line (section 6).
@@ -341,10 +341,14 @@ Rule features (case-insensitive; lexicons in `data/cringe_lexicon.json`). Points
 | `emoji_overload` | more than 3 emoji (1 pt each beyond 3, cap 8) | up to 8 |
 | `buzzwords` | "synergy", "leverage", "ecosystem", "disrupt", "growth mindset", "thought leader", "journey", "unlock" (2 pts each, cap 10) | up to 10 |
 | `listicle` | "3 lessons", "5 things", numbered lines | 6 |
-| `fake_vulnerability` | "I cried", "broke down", "at 3am", "nobody believed" | 8 |
+| `fake_vulnerability` | "I cried", first-person "I/we broke down", "at 3am", "nobody believed"; displayed as "Vulnerability phrasing" | 8 |
 | `over_length` | more than 1300 characters | 6 |
 
 Blend: if there are no comments yet, `score = rule_score`. Otherwise `llm_score = 100 x (share of commenters with cringe_flag)` and `score = 0.6 x rule_score + 0.4 x llm_score`. `reasons` is the triggered features sorted by points, max 5. Unit tests cover each feature and the blend, and a set of 10 known-cringe vs 10 plain posts must separate (I7).
+
+Engagement-bait detection also recognises reader-directed endings such as "Agree or disagree?", "What's a setback ... you ...?", "What do you think?", and share/follow invitations, including trailing emoji. "My study habits broke down" is not a first-person emotional confession. These are wording signals, not claims about the author's sincerity. Persona actions remain mutually exclusive; a model-selected like discards stray comment text rather than being converted into a comment. The feed labels likes as silent likes.
+
+Generate and Check share a responsive professional-feed shell with original teal branding. Comments show five varied archetypes initially and expand on request. All finalists remain visible in selection order until completion; only then are ranks and the tone slider shown. Reality translation stays attached to its actual post when the slider reorders results. Tailwind uses its official PostCSS integration (`@tailwindcss/postcss`, replacing the Turbopack-only development loader), supporting both Next build modes.
 
 ## 8. Ranking (Mahir M3; Python in `backend/workflows/tasks/pipeline.py`, client copy in `frontend/lib/rank.ts`)
 

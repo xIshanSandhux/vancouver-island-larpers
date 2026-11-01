@@ -41,6 +41,19 @@ _SENTENCE_START = re.compile(r"(?:^|[.!?:;]\s+|[\n\r]\s*(?:[-*•+]\s*|\d+[.)]\s
 _HASHTAG = re.compile(r"(?<!\w)#\w+")
 
 
+def check_post_shape(text: str, voice_id: str) -> list[str]:
+    reasons = []
+    words = len(text.split())
+    if not 40 <= words <= 140:
+        reasons.append(f"use 40 to 140 words (received {words})")
+    lowered = text.strip().casefold()
+    if voice_id != "unpopular_opinion" and lowered.startswith("unpopular opinion"):
+        reasons.append("reserve the 'Unpopular opinion:' opening for that voice")
+    if voice_id == "unpopular_opinion" and not lowered.startswith("unpopular opinion:"):
+        reasons.append("this voice must start with 'Unpopular opinion:'")
+    return reasons
+
+
 def _digit_runs(text: str) -> set[str]:
     return set(_DIGITS.findall(text))
 

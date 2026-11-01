@@ -55,3 +55,20 @@ def test_cringe_reasons_are_stable_and_blend_comment_flags():
     result = cringe.score("p", text, comments)
     assert result.score == pytest.approx(0.6 * result.rule_score + 0.4 * 50)
     assert result.reasons == one[:5]
+
+
+def test_broken_study_habits_are_not_a_vulnerability_confession():
+    assert "fake_vulnerability" not in {f.id for f in cringe.features("My study habits broke down.")}
+    assert "fake_vulnerability" in {f.id for f in cringe.features("I broke down after the meeting.")}
+
+
+@pytest.mark.parametrize("ending", [
+    "What's a setback that taught you more than a win ever did?",
+    "Agree or disagree?", "What do you think?", "Thoughts? 🚀", "Share your story below.",
+])
+def test_engagement_bait_handles_real_endings(ending):
+    assert "engagement_bait" in {f.id for f in cringe.features("An ordinary day.\n\n" + ending)}
+
+
+def test_a_question_about_the_event_is_not_automatically_engagement_bait():
+    assert "engagement_bait" not in {f.id for f in cringe.features("Why did the test fail?")}

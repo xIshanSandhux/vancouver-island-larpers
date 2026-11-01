@@ -24,7 +24,7 @@ _LABELS = {
     "emoji_overload": "Emoji overload",
     "buzzwords": "Corporate buzzwords",
     "listicle": "Listicle format",
-    "fake_vulnerability": "Fake vulnerability",
+    "fake_vulnerability": "Vulnerability phrasing",
     "over_length": "Overly long post",
 }
 
@@ -75,10 +75,17 @@ def features(text: str) -> list[CringeFeature]:
     if hook:
         found.append(hook)
 
+    ending = re.sub(r"[^\w?!.'\s]", "", paragraphs[-1].casefold().replace("’", "'") if paragraphs else "").strip()
     engagement_count = sum(
         1 for phrase in lexicon["engagement_bait"]
-        if lowered.rstrip().endswith(phrase.casefold())
+        if ending.endswith(phrase.casefold())
     )
+    engagement_count += bool(re.search(
+        r"(?:agree or disagree|what do you think|share your (?:story|thoughts)|"
+        r"what(?:'s| is) your\b|what(?:'s| is) a\b.*\byou\b|"
+        r"what\b.*\bwould you\b|have you ever|let me know|"
+        r"repost if\b|follow for more\b)", ending
+    ))
     engagement = _feature("engagement_bait", engagement_count, 10)
     if engagement:
         found.append(engagement)
@@ -110,7 +117,10 @@ def features(text: str) -> list[CringeFeature]:
     if listicle:
         found.append(listicle)
 
-    vulnerability_count = _count_phrases(text, lexicon["fake_vulnerability"])
+    vulnerability_count = _count_phrases(text, [
+        phrase for phrase in lexicon["fake_vulnerability"] if phrase.casefold() != "broke down"
+    ])
+    vulnerability_count += len(re.findall(r"\b(?:i|we)\s+(?:just\s+)?broke down\b", lowered))
     vulnerability = _feature("fake_vulnerability", vulnerability_count, 8)
     if vulnerability:
         found.append(vulnerability)

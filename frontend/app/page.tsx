@@ -7,8 +7,9 @@ import { PostPreview } from "@/components/generate/PostPreview";
 import { RealityToggle } from "@/components/generate/RealityToggle";
 import { StageTrail } from "@/components/generate/StageTrail";
 import { ToneSlider } from "@/components/generate/ToneSlider";
-import { RENDER_DASHBOARD_URL } from "@/lib/api";
-import { DEFAULT_TONE_WEIGHT, rank } from "@/lib/rank";
+import { DEFAULT_TONE_WEIGHT } from "@/lib/rank";
+import { finalistOrder } from "@/lib/finalists";
+import { FeedShell } from "@/components/feed/FeedShell";
 import { useRun } from "@/lib/useRun";
 
 /** We open on the title card, run the demo, then come back to it to close. */
@@ -48,8 +49,7 @@ export default function GeneratePage() {
   // The slider re-orders what we already have; the server's order is the fallback.
   const order = useMemo(() => {
     if (!run) return [];
-    if (run.scores.length > 0) return rank(run.scores, toneWeight);
-    return run.ranking.length > 0 ? run.ranking : run.finalist_ids;
+    return finalistOrder(run, toneWeight);
   }, [run, toneWeight]);
 
   const variantFor = (postId: string) => run?.variants.find((v) => v.post_id === postId);
@@ -63,10 +63,12 @@ export default function GeneratePage() {
       {/* The run itself lives in this component's state, so returning to the title
           card and back never loses a run in flight. The key only replays the
           entrance animation each time the demo comes forward. */}
-      <main
+      <div
         key={scene === "demo" ? "demo" : "hidden"}
-        className="stage-in mx-auto w-full max-w-2xl flex-1 px-4 py-10"
+        hidden={scene !== "demo"}
+        className="stage-in"
       >
+      <FeedShell mode="generate" run={run} status={run ? <StageTrail run={run} /> : undefined}>
         <header className="mb-6">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -77,8 +79,8 @@ export default function GeneratePage() {
           </span>
         </div>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Type something boring. We write 20 versions of you, then test the best three on 50
-          simulated commenters.
+          Your ordinary day. An extraordinary amount of professional self-importance.
+          We write up to 20 drafts, check their facts, and test the finalists on a simulated audience.
         </p>
       </header>
 
@@ -116,16 +118,15 @@ export default function GeneratePage() {
 
       {run && (
         <div className="mt-6 space-y-4">
-          <StageTrail run={run} />
-
-          {run.scores.length > 1 && <ToneSlider value={toneWeight} onChange={setToneWeight} />}
+          <div className="flex items-center gap-3 text-xs text-zinc-500"><span className="h-px flex-1 bg-zinc-300 dark:bg-zinc-700" /><span>{run.status === "completed" ? "Your ranked feed" : "Finalists · ranking after all reactions arrive"}</span><span className="h-px flex-1 bg-zinc-300 dark:bg-zinc-700" /></div>
+          {run.status === "completed" && run.scores.length > 1 && <ToneSlider value={toneWeight} onChange={setToneWeight} />}
+          {run.variants.length > 0 && <p className="text-xs text-zinc-500">{run.variants.length} drafts passed generation checks · {run.finalist_ids.length} finalists</p>}
 
           {order.map((postId, index) => {
             const variant = variantFor(postId);
             if (!variant) return null;
             const score = run.scores.find((s) => s.post_id === postId);
             const comments = run.comments.filter((c) => c.post_id === postId);
-            const isWinner = index === 0;
             return (
               <PostPreview
                 key={postId}
@@ -134,8 +135,9 @@ export default function GeneratePage() {
                 comments={comments}
                 personaTotal={run.persona_total}
                 position={index + 1}
+                ranked={run.status === "completed"}
               >
-                {isWinner && run.reality && <RealityToggle reality={run.reality} />}
+                {run.reality?.post_id === postId && <RealityToggle reality={run.reality} />}
               </PostPreview>
             );
           })}
@@ -143,24 +145,12 @@ export default function GeneratePage() {
           {phase === "done" && (
             <p className="pt-2 text-center text-xs text-zinc-400">
               Simulated audience, not a prediction of real engagement.
-              {RENDER_DASHBOARD_URL && (
-                <>
-                  {" · "}
-                  <a
-                    href={RENDER_DASHBOARD_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline hover:text-zinc-600"
-                  >
-                    See the task runs on Render
-                  </a>
-                </>
-              )}
             </p>
           )}
         </div>
       )}
-      </main>
+      </FeedShell>
+      </div>
 
       <button
         type="button"

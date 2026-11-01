@@ -24,11 +24,13 @@ export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onS
   return (
     <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <label htmlFor="event" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        What actually happened?
+        Start a thought-leader post
       </label>
       <textarea
         id="event"
         value={text}
+        disabled={busy}
+        aria-describedby="event-hint"
         onChange={(e) => onTextChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit) onSubmit();
@@ -37,6 +39,7 @@ export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onS
         placeholder="I got a coffee and went to a meeting."
         className="mt-2 w-full resize-none rounded-lg border border-zinc-300 bg-white p-3 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-300"
       />
+      <p id="event-hint" className="mt-1 text-xs text-zinc-500">What actually happened? One ordinary sentence is enough.</p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-xs text-zinc-500">Try:</span>
@@ -44,6 +47,7 @@ export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onS
           <button
             key={example}
             type="button"
+            disabled={busy}
             onClick={() => onTextChange(example)}
             className="rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-600 transition hover:border-zinc-900 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-300 dark:hover:text-zinc-100"
           >
@@ -72,7 +76,7 @@ export function InputPanel({ text, onTextChange, demoMode, onDemoModeChange, onS
           type="button"
           onClick={onSubmit}
           disabled={!canSubmit}
-          className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="rounded-full bg-teal-800 px-5 py-2 text-sm font-semibold text-white transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-teal-300 dark:text-teal-950 dark:hover:bg-teal-200"
         >
           {busy ? "Larping…" : "Make me a thought leader"}
         </button>
