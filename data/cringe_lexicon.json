@@ -1,40 +1,7 @@
 {
-  "hook_phrase": [
-    "unpopular opinion",
-    "nobody talks about",
-    "here's the truth",
-    "I was fired",
-    "stop scrolling",
-    "stop doing",
-    "harsh truth"
-  ],
-  "engagement_bait": [
-    "Agree?",
-    "Thoughts?",
-    "Repost if",
-    "Follow for more"
-  ],
-  "humblebrag": [
-    "humbled",
-    "honored",
-    "thrilled to announce",
-    "grateful",
-    "blessed"
-  ],
-  "buzzwords": [
-    "synergy",
-    "leverage",
-    "ecosystem",
-    "disrupt",
-    "growth mindset",
-    "thought leader",
-    "journey",
-    "unlock"
-  ],
-  "fake_vulnerability": [
-    "I cried",
-    "broke down",
-    "at 3am",
-    "nobody believed"
-  ]
+  "hook_phrase": ["unpopular opinion", "nobody talks about", "here's the truth", "I was fired", "stop scrolling", "stop doing", "harsh truth"],
+  "engagement_bait": ["Agree?", "Thoughts?", "Repost if", "Follow for more"],
+  "humblebrag": ["humbled", "honored", "thrilled to announce", "grateful", "blessed"],
+  "buzzwords": ["synergy", "leverage", "ecosystem", "disrupt", "growth mindset", "thought leader", "journey", "unlock"],
+  "fake_vulnerability": ["I cried", "broke down", "at 3am", "nobody believed"]
 }
