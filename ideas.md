@@ -275,6 +275,120 @@ This keeps the useful financial-literacy angle while making voice and roleplay e
 
 For any choice, script the first 30 seconds of the demo and keep the live path to one successful interaction.
 
+---
+
+## Ideas that are actual LARPs, not just voice wrappers
+
+Most of the ideas above are persona generators or voice-enabled assistants. Use this elimination test:
+
+> If someone can reproduce the entire demo by opening ChatGPT Voice or Claude Voice and giving it one prompt, reject the idea.
+
+ElevenLabs should be the audio layer, not the entire product. The product should add mechanics that ordinary voice mode does not provide:
+
+- multiple players with private information
+- secret objectives and conflicting goals
+- persistent world state
+- timers and scheduled events
+- real emails, files, QR codes, or physical clues
+- consequences that change based on player actions
+- scoring and a clear ending
+- separate in-character and out-of-character modes
+
+The strongest direction is to build a small LARP engine and ship one excellent scenario rather than a generic chatbot that can roleplay anything.
+
+## 16. The Last Meeting: a multiplayer startup crisis
+
+A 10-minute live roleplaying game for 2–4 people. A fictional startup is about to collapse, and each player receives a private role, different information, and a secret objective:
+
+- CEO trying to sell the company
+- engineer hiding a serious outage
+- investor trying to force a cheap acquisition
+- journalist investigating fraud
+
+Players must talk, negotiate, lie, and make decisions in character.
+
+- **Product mechanics:** private role cards, hidden information, timed rounds, shared decisions, random events, private messages, reputation scores, and a final outcome.
+- **ElevenLabs:** voices for announcements, interruptions, and NPCs.
+- **Render:** advances the game, schedules events, and computes consequences.
+- **Agentboxd:** delivers private in-world emails.
+- **ConfigCat:** switches scenarios or rule variations.
+- **Demo:** four people play the first crisis round and see the outcome change based on their decisions.
+- **Why it fits:** players are physically performing roles in a live situation. It cannot be replaced by one person opening a voice chatbot.
+
+## 17. The LARP Room: a short-session LARP engine
+
+A product that creates and runs short live roleplaying sessions. For one scenario it creates character cards, secret motives, relationships, private clues, round structure, win conditions, and consequences.
+
+Start with one scenario such as a haunted hotel evacuation or a museum artifact theft. Do not build a general-purpose world generator during the hackathon.
+
+- **ElevenLabs:** in-world announcements and NPC voices.
+- **Render:** session state, timed events, and the final resolution.
+- **Agentboxd:** private character instructions and messages.
+- **Why it fits:** the product is the game engine, not the AI character.
+
+## 18. Undercover: a venue-based LARP
+
+Players receive secret identities and complete objectives by scanning QR codes placed around the venue. Some QR codes reveal clues, some trigger events, and some expose a player’s identity.
+
+Example roles:
+
+- spy
+- security guard
+- journalist
+- double agent
+
+- **ElevenLabs:** in-world radio messages.
+- **Render:** timed events and mission state.
+- **Agentboxd:** secret instructions and messages.
+- **Demo:** place three QR codes around the room and let judges play one short round.
+- **Why it fits:** the app is connected to the physical environment, so ordinary voice mode cannot reproduce the experience.
+
+## 19. The Emergency Drill
+
+Players act as staff during a fictional crisis: an airport shutdown, restaurant contamination incident, cyberattack, or city blackout.
+
+Each player has different information and limited authority. The app injects new developments every minute and scores how well the team responds.
+
+- **ElevenLabs:** emergency announcements and role-specific voices.
+- **Render:** scheduled incidents, branching consequences, and the final report.
+- **Sentry:** can provide the fictional incident dashboard for a cyberattack scenario.
+- **Demo:** the team receives an unexpected event and has 30 seconds to respond.
+- **Why it fits:** the players must act as characters under pressure rather than ask an assistant for advice.
+
+## 20. The Secret Dinner
+
+A social LARP for a real dinner or party. Every participant receives a fictional identity, secret goal, relationship with another guest, something to hide, and something to discover.
+
+The app privately sends messages and changes the story as players complete actions.
+
+- **ElevenLabs:** private voice messages from NPCs.
+- **Agentboxd:** in-world invitations, accusations, and secrets.
+- **Render:** tracks completed objectives and triggers plot changes.
+- **Fantasy Kitchen:** could provide the restaurant setting for a themed demo, without pretending there is an API integration.
+- **Why it fits:** the social interaction between real participants is the core product.
+
+## 21. The Trial
+
+A live courtroom roleplay where every player has different evidence.
+
+Possible roles include prosecutor, defense lawyer, witness, judge, and journalist. The app distributes evidence privately, tracks contradictions, and reveals new evidence at timed moments.
+
+- **ElevenLabs:** judge announcements and courtroom voices.
+- **Render:** evidence reveals, contradiction tracking, and verdict scoring.
+- **Agentboxd:** private witness statements and legal-style messages for a fictional case.
+- **Demo:** a judge receives one secret piece of evidence and must decide whether to reveal it.
+- **Why it fits:** each participant has a character, knowledge boundary, objective, and live performance.
+
+## What to demote
+
+Thought Leadr, Sommelier Larp, Staff Engineer Larp, Native Larp, Local Larp, and Penny are mostly persona or voice wrappers. They become stronger only if converted into live scenes with multiple participants, private information, objectives, consequences, and a real ending.
+
+Larp Master is the closest existing idea, but it should become a multiplayer game engine with private character state and objectives. A voice game master alone is still reproducible with ChatGPT Voice.
+
+## Revised recommendation
+
+Build **The Last Meeting** as one polished, multiplayer, stateful LARP scenario. It is small enough to finish, clearly matches “pretend to be someone you are not,” gives ElevenLabs a genuine purpose, and cannot be replaced by simply opening normal GPT or Claude voice mode.
+
 ## Sources
 
 - Render Workflows: <https://render.com/blog/durability-as-code-introducing-render-workflows> and <https://render.com/articles/render-vs-trigger>
