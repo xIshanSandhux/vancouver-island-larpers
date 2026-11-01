@@ -12,10 +12,11 @@ interface PostPreviewProps {
   comments: CommentResult[];
   personaTotal: number;
   position: number;
+  ranked?: boolean;
   children?: React.ReactNode;
 }
 
-export function PostPreview({ variant, score, comments, personaTotal, position, children }: PostPreviewProps) {
+export function PostPreview({ variant, score, comments, personaTotal, position, ranked, children }: PostPreviewProps) {
   return (
     <PostCard
       variant={variant}
@@ -23,6 +24,7 @@ export function PostPreview({ variant, score, comments, personaTotal, position, 
       comments={comments}
       personaTotal={personaTotal}
       position={position}
+      ranked={ranked}
       streaming={comments.length < personaTotal}
     >
       {children}

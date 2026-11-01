@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CommentResult } from "../../lib/contracts";
-import { dedupeComments, reactionCounts, scoreWidth, visibleComments } from "./helpers";
+import { dedupeComments, previewComments, reactionCounts, scoreWidth, visibleComments } from "./helpers";
 
 const comment = (event_id: string, action: CommentResult["action"], text: string | null = null): CommentResult => ({
   event_id,
@@ -36,5 +36,17 @@ describe("feed helpers", () => {
 
   it("clamps the displayed score to the meter range", () => {
     expect(scoreWidth({ post_id: "draft", rule_score: 120, llm_score: null, score: 120, reasons: [] })).toBe(100);
+  });
+
+  it("previews different archetypes without duplicating retried events", () => {
+    const first = comment("a", "comment", "first");
+    const same = comment("b", "comment", "same archetype");
+    const skeptic = { ...comment("c", "comment", "disagree"), archetype: "skeptic" };
+    expect(previewComments([first, same, first, skeptic], 2).map((item) => item.event_id)).toEqual(["a", "c"]);
+  });
+
+  it("caps comment previews at five and fills spare slots in arrival order", () => {
+    const comments = Array.from({ length: 8 }, (_, i) => comment(String(i), "comment", "reply"));
+    expect(previewComments(comments).map((item) => item.event_id)).toEqual(["0", "1", "2", "3", "4"]);
   });
 });

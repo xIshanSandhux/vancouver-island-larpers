@@ -1,6 +1,19 @@
-from workflows.guardrails import check_variant
+from workflows.guardrails import check_variant, check_post_shape
 
 INPUT = "I got a coffee and went to a meeting."
+
+
+def test_generated_posts_must_be_40_to_140_words():
+    assert check_post_shape("word " * 39, "humblebrag")
+    assert check_post_shape("word " * 141, "humblebrag")
+    assert check_post_shape("word " * 40, "humblebrag") == []
+    assert check_post_shape("word " * 140, "humblebrag") == []
+
+
+def test_hot_take_cannot_borrow_the_unpopular_opinion_opening():
+    post = "Unpopular opinion: " + "word " * 40
+    assert check_post_shape(post, "hot_take")
+    assert check_post_shape(post, "unpopular_opinion") == []
 
 
 def test_clean_variant_passes():

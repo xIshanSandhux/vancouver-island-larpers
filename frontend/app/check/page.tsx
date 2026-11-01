@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PostCard } from "@/components/feed";
+import { FeedShell } from "@/components/feed/FeedShell";
 import { getRun, RunRequestError, startToneDown } from "@/lib/api";
 import { CHECK_MAX_CHARS, type RunState } from "@/lib/contracts";
 import { useRun } from "@/lib/useRun";
@@ -90,7 +91,7 @@ export default function CheckPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
+    <FeedShell mode="check" run={displayRun}>
       <header className="mb-6">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Check a draft</h1>
@@ -160,6 +161,6 @@ export default function CheckPage() {
       )}
 
       <Link href="/" className="mt-8 inline-block text-sm text-zinc-600 underline underline-offset-2 dark:text-zinc-400">Back to Generate</Link>
-    </main>
+    </FeedShell>
   );
 }

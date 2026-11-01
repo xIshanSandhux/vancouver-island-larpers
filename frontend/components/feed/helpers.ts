@@ -24,6 +24,24 @@ export function visibleComments(comments: CommentResult[]): CommentResult[] {
   return dedupeComments(comments).filter((comment) => comment.action === "comment" && Boolean(comment.comment));
 }
 
+export function previewComments(comments: CommentResult[], limit = 5): CommentResult[] {
+  const visible = visibleComments(comments);
+  const picked: CommentResult[] = [];
+  const voices = new Set<string>();
+  for (const comment of visible) {
+    if (picked.length >= limit) break;
+    if (!voices.has(comment.archetype)) {
+      picked.push(comment);
+      voices.add(comment.archetype);
+    }
+  }
+  for (const comment of visible) {
+    if (picked.length >= limit) break;
+    if (!picked.includes(comment)) picked.push(comment);
+  }
+  return picked;
+}
+
 export function scoreTone(score: number): string {
   if (score >= 67) return "text-amber-700 dark:text-amber-300";
   if (score >= 34) return "text-amber-600 dark:text-amber-400";

@@ -53,10 +53,15 @@ def fake_llm(monkeypatch):
     async def fake_call_json(*, system, user, schema=None, max_tokens=1024, model=None):
         if "original" in user:  # the reality translation prompt
             return {"translation": "It was a coffee.", "inflations": ["a mindset"]}
-        return {"post": "i got a coffee and went to a meeting.\n\nthat is the whole story."}
+        opening = "Unpopular opinion: " if "Voice: Unpopular opinion." in user else ""
+        return {"post": opening + "i got a coffee.\n\nthat is the whole story. an ordinary event does not need an extraordinary backstory. perhaps the real thought leadership is letting a small moment stay small, even when the urge to turn it into a grand lesson is very strong."}
+
+    async def grounded(*_):
+        return {}
 
     monkeypatch.setattr("workflows.tasks.pipeline.call_json", fake_call_json)
     monkeypatch.setattr("workflows.tasks.reality.call_json", fake_call_json)
+    monkeypatch.setattr("workflows.tasks.pipeline.review_grounding", grounded)
 
 
 def test_tasks_are_registered():
@@ -120,13 +125,17 @@ async def test_write_variant_batch_returns_one_variant_per_voice(fake_llm):
     assert out[0]["voice_id"] == "humblebrag"
 
 
-async def test_write_variant_batch_drops_a_variant_that_invents_facts(monkeypatch):
+async def test_write_variant_batch_replaces_a_variant_that_invents_facts(monkeypatch):
     async def inventing(*, system, user, schema=None, max_tokens=1024, model=None):
         return {"post": "I joined Microsoft and raised 40 million dollars."}
 
     monkeypatch.setattr("workflows.tasks.pipeline.call_json", inventing)
     assignments = [{"post_id": "v01", "voice": {"id": "v", "label": "V", "instruction": "x"}}]
-    assert await write_variant_batch.func(FakeCtx(), "r1", "i got a coffee.", assignments) == []
+    out = await write_variant_batch.func(FakeCtx(), "r1", "i got a coffee.", assignments)
+    assert len(out) == 1
+    assert "Microsoft" not in out[0]["text"]
+    assert "40 million" not in out[0]["text"]
+    assert "grounded fallback" in out[0]["voice_label"]
 
 
 async def test_generate_run_reaches_completion_and_ranks(events, fake_llm):
@@ -217,12 +226,12 @@ class TestPersonaReactionNormalisation:
     cringe flags.
     """
 
-    def test_a_like_with_a_comment_becomes_a_comment(self):
+    def test_a_like_keeps_its_action_and_discards_stray_comment_text(self):
         reaction = PersonaReaction.model_validate(
             {"action": "like", "comment": "Love this! 🎉", "appeal": 3, "cringe_flag": True}
         )
-        assert reaction.action == "comment"
-        assert reaction.comment == "Love this! 🎉"
+        assert reaction.action == "like"
+        assert reaction.comment is None
         assert reaction.cringe_flag is True
 
     def test_a_comment_with_no_text_becomes_an_ignore(self):
@@ -334,10 +343,10 @@ class TestOverLongComments:
         )
         assert reaction.comment == exact
 
-    def test_a_long_comment_on_a_like_survives_both_fixes(self):
+    def test_a_long_comment_on_a_like_does_not_convert_the_action(self):
         """Over-length text plus the like/comment mismatch, together."""
         reaction = PersonaReaction.model_validate(
             {"action": "like", "comment": self.LONG, "appeal": 5, "cringe_flag": True}
         )
-        assert reaction.action == "comment"
-        assert len(reaction.comment) <= MAX_COMMENT_CHARS
+        assert reaction.action == "like"
+        assert reaction.comment is None

@@ -52,9 +52,9 @@ class PersonaReaction(BaseModel):
                 clipped = text[: MAX_COMMENT_CHARS - 1]
                 text = (clipped.rsplit(" ", 1)[0] if " " in clipped else clipped) + "…"
             data["comment"] = text
-            # Said something while liking: that is a comment.
+            # Preserve the chosen action; stray text must not turn likes into comments.
             if data.get("action") == "like":
-                data["action"] = "comment"
+                data["comment"] = None
             # You cannot comment while scrolling past or reporting.
             elif data.get("action") in ("ignore", "report"):
                 data["comment"] = None
@@ -88,7 +88,17 @@ Comment style: {comment_style}
 
 React to the post as this persona. The persona is fictional and the audience is simulated.
 Choose exactly one action: like, comment, ignore, or report. Comment only when this persona would
-actually add something. Keep a comment concise and at most 140 characters. Set appeal from
+actually add something. A like is silent approval: its comment must be null. Ignore means
+no comment either. Treat like_bias (0 to 1) as your tendency toward silent likes, not replies.
+Do not manufacture advice just because you were asked to react. Quiet lurkers usually ignore;
+skeptics can dislike the framing and scroll past. A report is for abuse, not mere cringe.
+If commenting, follow your own bio and style instead of a generic helpful-coach voice.
+Use one specific observation, not a summary of the post. Avoid stock openings like
+'Honest reflection', 'Love this take', 'Name the gap', and 'Ship the fix'. A brief joke,
+disagreement, empty bot praise, or practical question is fine when it fits your persona.
+Never invent an author action, study plan, retake, team, deck, or future outcome. Do not
+claim you shared this post or met the author. Do not sign your own name.
+Keep a comment to one complete sentence, ideally under 100 and at most 140 characters. Set appeal from
 1 (not appealing) to 5 (very appealing), and set cringe_flag based on whether the persona
 would find the post performative or embarrassing. Return exactly this JSON shape, with no
 markdown or explanation: {{"action":"like|comment|ignore|report","comment":"string or null","appeal":1,"cringe_flag":false}}"""
