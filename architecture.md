@@ -6,89 +6,104 @@ Items marked **VERIFY** are things I could only confirm from secondary documenta
 
 ## 1. System overview
 
+Three deployables, two folders of code, one repo:
+
+| Deployable | Folder | Render type | Start command |
+|---|---|---|---|
+| Frontend (Next.js UI) | `frontend/` | web service | `npm run start` |
+| API (FastAPI) | `backend/` (`backend/app/`) | web service | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1` |
+| Workflow tasks (Python) | `backend/` (`backend/workflows/`) | **Workflow service** | **VERIFY** (expected `python -m workflows.main`) |
+
+The API and the workflow service use the **same root directory** (`backend/`), so they share one Python codebase, one `requirements.txt`, the same Pydantic models and the same `cringe/` module.
+
 ```
-                       Browser (Next.js UI)
-                         |  POST /api/runs            ^  GET /api/runs/:id  (poll ~1s)
-                         v                            |
-              +--------------------------------------------+
-              |  Render WEB service: web/  (Next.js, TS)   |
-              |  - in-memory RunStore (globalThis Map)     |
-              |  - POST /api/runs  -> start_task(...)      |
-              |  - POST /api/runs/:id/events   (internal)  |
-              |  - POST /api/runs/:id/demo-fail-claim      |
-              +--------------------------------------------+
-                  | start_task (@renderinc/sdk)     ^ events (HTTPS POST, Bearer secret)
-                  v                                 |
-              +--------------------------------------------+
-              |  Render WORKFLOW service: workflows/ (Py)  |
-              |  run_pipeline (root)                       |
-              |    +-- write_variant_batch   x N  (Claude) |
-              |    +-- run_commenter_batch   x M  (Feather)|
-              |    +-- translate_reality          (Claude) |
-              |  run_tone_down (root)          (Claude)    |
-              +--------------------------------------------+
-                  |                    |
-                  v                    v
-            Anthropic API       Featherless AI API
+                       Browser
+                         |  GET /  (static UI)               ^ GET /api/runs/:id  (poll ~1s)
+                         v                                   |
+              +-----------------------+   fetch (CORS)  +--------------------------------------+
+              | Render WEB: frontend/ |---------------->| Render WEB: backend/app  (FastAPI)   |
+              | Next.js, TypeScript   |                 |  - in-memory RunStore                |
+              +-----------------------+                 |  - POST /api/runs -> start_task()    |
+                                                        |  - POST /internal/runs/:id/events    |
+                                                        |  - POST /internal/runs/:id/demo-fail |
+                                                        |  - abuse guard (limits, busy 429)    |
+                                                        +--------------------------------------+
+                                                           | start_task (Render Python SDK)   ^ events
+                                                           v                                  | (HTTPS POST, Bearer)
+                                                        +--------------------------------------+
+                                                        | Render WORKFLOW: backend/workflows   |
+                                                        |  run_pipeline (root)                 |
+                                                        |   +-- write_variant_batch  x N (Claude)
+                                                        |   +-- run_commenter_batch  x M (Featherless)
+                                                        |   +-- translate_reality        (Claude)
+                                                        |  run_tone_down (root)        (Claude)|
+                                                        +--------------------------------------+
+                                                                |                  |
+                                                                v                  v
+                                                          Anthropic API     Featherless AI API
 ```
 
-### Why events are pushed to the web service
+### Why events are pushed to the API
 
 - A workflow task run only returns its result **when it finishes**. A user watching a comment section needs results as they happen.
-- Task runs **cannot receive incoming connections**, but they can make outgoing ones. So tasks POST progress events to the web service, and the browser polls the web service.
-- This also avoids polling the Render API every second. Root-level Render API calls are rate limited (50 per minute on Hobby, **VERIFY**), and the browser would exceed that quickly.
-- The web service holds run state in memory. There is no database. That is a deliberate choice for a 7-hour build (see `requirements.md`, out of scope).
-- Event delivery is idempotent. Every event has an `event_id`, and the store ignores a repeat. This matters because Render retries failed tasks, and a retried task re-sends events.
+- Task runs **cannot receive incoming connections**, but they can make outgoing ones. So tasks POST progress events to the API, and the browser polls the API.
+- This also avoids polling the Render API every second. Root-level Render API calls are rate limited (50 per minute on Hobby, **VERIFY**).
+- The API holds run state in memory. There is no database. That is deliberate for a 7-hour build.
+- Event delivery is idempotent. Every event has an `event_id`, and the store ignores a repeat. Render retries failed tasks, and a retried task re-sends events.
+- The API also watches the started task run (`await` on the SDK's awaitable run). If the root run fails or is cancelled without posting `run_failed`, the API marks the run failed so the UI never hangs.
 
 ## 2. Repository layout and ownership
 
+The template for both apps already exists on `main`. Files marked *(template)* exist today.
+
 ```
 /
-  agents.md  CLAUDE.md  requirements.md  architecture.md  ideas.md
-  data/
-    personas.json         # Ishan  (I1)  50 personas, 10 archetypes x 5
-    voices.json           # Mahir  (M2)  20 post voices + prompt templates
-    cringe_lexicon.json   # Ishan  (I3)  phrase lists used by rule features
-    samples/              # shared  example RunState JSON for UI mocks and tests
-  workflows/              # Python Render Workflow service
-    main.py               # Mahir (M1)  app = Workflows(...); registers tasks; app.start()
-    config.py             # Mahir (M1)  batch sizes, model names, env var reads
-    models.py             # shared contract (Pydantic). Changes need both people.
-    events.py             # Mahir (M1)  post_event(), claim_demo_fail()
-    llm/
-      anthropic_client.py # Mahir (M2)
-      featherless_client.py # Ishan (I2)
-    tasks/
-      pipeline.py         # Mahir (M2, M3)  run_pipeline, write_variant_batch, filter
-      commenters.py       # Ishan (I2)      run_commenter_batch
-      reality.py          # Mahir (M4)      translate_reality
-      tone_down.py        # Ishan (I4)      run_tone_down
-    cringe/               # Ishan (I3)  features(), score()  (stub created by M1)
+  README.md  agents.md  CLAUDE.md  requirements.md  architecture.md  ideas.md   (.gitignore)
+  data/                       # read by the backend
+    personas.json             # Ishan  (I1)  50 personas, 10 archetypes x 5
+    voices.json               # Mahir  (M2)  20 post voices + prompt templates
+    cringe_lexicon.json       # Ishan  (I3)  phrase lists used by rule features
+    samples/                  # shared  example RunState / event JSON, ranking_case.json
+  backend/                    # Python 3.11+  (venv in backend/.venv, git-ignored)
+    requirements.txt  pytest.ini  .env.example                              (template)
+    app/                      # FastAPI service
+      main.py  config.py                                                    (template)
+      models.py               # shared contract (Pydantic). Changes need both people.  (M1)
+      store.py                # Mahir (M5)  RunStore, event application, dedupe, TTL
+      render_client.py        # Mahir (M5)  start_task + watcher around the Render Python SDK
+      guard.py                # Mahir (M9)  rate/concurrency limits, input checks, busy 429
+      routes/runs.py          # Mahir (M5)  POST /api/runs, GET /api/runs/{id}
+      routes/internal.py      # Mahir (M5/M7)  events + demo-fail-claim (secret protected)
+      routes/tone_down.py     # Ishan (I4)  POST /api/runs/{id}/tone-down
+    workflows/                # Render Workflow service (same root dir as the API)
+      main.py                 # Mahir (M1)  app = Workflows(...); registers tasks; app.start()
+      events.py               # Mahir (M1)  post_event(), claim_demo_fail()
+      llm/anthropic_client.py # Mahir (M2)
+      llm/featherless_client.py # Ishan (I2)
+      tasks/pipeline.py       # Mahir (M2, M3)  run_pipeline, write_variant_batch, filter_top3
+      tasks/reality.py        # Mahir (M4)
+      tasks/commenters.py     # Ishan (I2)  run_commenter_batch
+      tasks/tone_down.py      # Ishan (I4)  run_tone_down
+    cringe/                   # Ishan (I3)  features(), score()  (stub created by M1)
+    scripts/consistency.py    # Ishan (I7)
     tests/
-    requirements.txt
-  web/                    # Next.js (App Router, TypeScript, Tailwind)
-    app/
-      page.tsx            # Mahir (M6) generate page
-      check/page.tsx      # Ishan (I6) paste-a-draft page
-      api/runs/route.ts                       # Mahir (M5)
-      api/runs/[id]/route.ts                  # Mahir (M5)
-      api/runs/[id]/events/route.ts           # Mahir (M5)  internal
-      api/runs/[id]/demo-fail-claim/route.ts  # Mahir (M7)  internal
-    components/feed/      # Ishan (I5)  PostCard, ReactionsBar, CommentThread, CringeMeter
-    components/generate/  # Mahir (M6)  InputBox, RankedList, RealityToggle, ToneSlider
-    lib/
-      contracts.ts        # shared contract (zod + TS types). Changes need both people.
-      runStore.ts         # Mahir (M5)
-      render.ts           # Mahir (M5)  thin wrapper around @renderinc/sdk
-      useRun.ts           # Mahir (M5)  polling hook
-      rank.ts             # Mahir (M3/M6)  client-side re-rank used by ToneSlider
+  frontend/                   # Next.js App Router, TypeScript, Tailwind  (template)
+    app/layout.tsx  app/page.tsx  lib/api.ts                                (template)
+    app/page.tsx              # Mahir (M6)  Generate page (replaces the template page)
+    app/check/page.tsx        # Ishan (I6)  Check page
+    components/feed/          # Ishan (I5)  PostCard, ReactionsBar, CommentThread, CringeMeter
+    components/generate/      # Mahir (M6)  InputBox, RankedList, RealityToggle, ToneSlider
+    lib/contracts.ts          # shared contract (zod + TS types). Changes need both people. (M1)
+    lib/useRun.ts             # Mahir (M5)  polling hook
+    lib/rank.ts               # Mahir (M3)  client-side re-rank used by ToneSlider
+    AGENTS.md                 # generated by create-next-app: points at the bundled Next.js docs. Keep it.
 ```
 
 Rule: **only edit files in your own column.** If you need a change in someone else's file or in a shared contract, tell the other person and agree before editing.
 
 ## 3. Contracts
 
-`workflows/models.py` (Pydantic) and `web/lib/contracts.ts` (zod) describe the same shapes. There is no code generation. The first PR (M1) writes both and commits example JSON in `data/samples/` that validates against both. After that, any change updates both files and the samples in the same PR.
+`backend/app/models.py` (Pydantic) and `frontend/lib/contracts.ts` (zod) describe the same shapes. There is no code generation. The first PR that touches contracts (M1) writes both and commits example JSON in `data/samples/` that validates against both. After that, any change updates both files and the samples in the same PR.
 
 ### 3.1 Enums
 
@@ -110,7 +125,7 @@ type RunRequest = {
 
 type Variant = {
   post_id: string;         // "v01".."v20"; in check mode a single post "draft"
-  voice_id: string;        // from voices.json
+  voice_id: string;        // from voices.json ("user" for the draft)
   voice_label: string;     // e.g. "Humblebrag"
   text: string;
 };
@@ -156,7 +171,7 @@ type Rewrite = { post_id: string; text: string; cringe_before: number; cringe_af
 
 type RunEvent = {
   event_id: string;
-  seq: number;             // assigned by the web service, increasing
+  seq: number;             // assigned by the API, increasing
   type:
     | "run_started" | "stage" | "variants_ready" | "finalists_selected"
     | "comment" | "cringe_scored" | "ranking_ready" | "reality_ready"
@@ -171,6 +186,7 @@ type RunState = {
   stage: Stage;
   input_text: string;
   demo_fail: boolean;
+  task_run_id: string | null;      // Render task run id, for the dashboard
   variants: Variant[];             // all 20 (generate) or the draft (check)
   finalist_ids: string[];          // 3 post_ids (generate) or ["draft"] (check)
   comments: CommentResult[];       // arrive over time
@@ -185,6 +201,8 @@ type RunState = {
   updated_at: string;
   last_seq: number;
 };
+
+type ApiError = { error: string; code: "busy" | "invalid_input" | "render_unavailable" | "not_found" | "internal" };
 ```
 
 ### 3.3 Event payloads
@@ -204,43 +222,49 @@ type RunState = {
 | run_completed | `{}` |
 | run_failed | `{ error: string }` |
 
-## 4. HTTP API (web service)
+## 4. HTTP API (FastAPI, `backend/app/`)
+
+CORS allows only the origins in `CORS_ORIGINS` (the frontend URL). Errors use the `ApiError` shape with a matching HTTP status (400 invalid input, 404 not found, 429 busy, 502 Render unavailable).
 
 | Method and path | Caller | Behaviour |
 |---|---|---|
-| `POST /api/runs` | browser | Validates `RunRequest`. Creates `run_id` (uuid). Creates a `RunState` with status `queued`. Calls `startTask("<workflow-slug>/run_pipeline", [{run_id, mode, text, demo_fail}])`. Returns `{run_id}`. If the Render call throws, mark the run `failed` and return 502 with an error message. |
-| `GET /api/runs/:id` | browser | Returns the full `RunState`. Returns 404 for unknown ids. The browser polls this about every 1000 ms until `status` is `completed` or `failed`, with a hard stop at 120 s. |
-| `POST /api/runs/:id/events` | workflow tasks only | Requires `Authorization: Bearer ${WORKFLOW_EVENT_SECRET}`. Body is one `RunEvent` without `seq`. Applies it to the run state if the `event_id` has not been seen. Returns `{ok: true, duplicate: boolean}`. |
-| `POST /api/runs/:id/demo-fail-claim` | workflow tasks only | Same auth. Atomically returns `{fail: true}` the **first** time it is called for a run with `demo_fail` set, otherwise `{fail: false}`. Used by the failure switch (section 6). |
-| `POST /api/runs/:id/tone-down` | browser | Check mode only. Starts `run_tone_down` for the draft. Result arrives as a `rewrite_ready` event. |
+| `GET /health` | anyone | `{"status": "ok"}` (template, already implemented) |
+| `POST /api/runs` | browser | Validates `RunRequest` (length limits, section 9). Runs the abuse guard (section 10). Creates `run_id` (uuid4), `RunState` with status `queued`. Calls `RenderAsync().workflows.start_task("<workflow-slug>/run_pipeline", [{run_id, mode, text, demo_fail}])`, stores `task_run_id`, starts the watcher. Returns `{run_id}`. If Render throws, mark the run failed and return 502 `render_unavailable`. |
+| `GET /api/runs/{id}` | browser | Returns the full `RunState`. 404 for unknown ids. The browser polls about every 1000 ms until `status` is `completed` or `failed`, with a hard stop at 120 s. |
+| `POST /api/runs/{id}/tone-down` | browser | Check mode only. Starts `run_tone_down` for the draft. The result arrives as a `rewrite_ready` event. |
+| `POST /internal/runs/{id}/events` | workflow tasks only | Requires `Authorization: Bearer ${WORKFLOW_EVENT_SECRET}` (constant-time compare). Body is one `RunEvent` without `seq`. Applies it to the run if the `event_id` has not been seen. Returns `{ok: true, duplicate: bool}`. |
+| `POST /internal/runs/{id}/demo-fail-claim` | workflow tasks only | Same auth. Atomically returns `{fail: true}` the **first** time it is called for a run with `demo_fail` set, otherwise `{fail: false}`. Used by the failure switch (section 6). |
 
-`RunStore` is a `Map<string, RunState>` stored on `globalThis` so Next.js dev hot-reload does not wipe it. Runs expire after 1 hour. The web service must run as a **single instance**.
+`RunStore` is a dict guarded by an `asyncio.Lock`. Runs expire after 1 hour. The API **must run as one instance with one worker** (`--workers 1`, one Render instance) because state is in memory.
 
-## 5. Workflow tasks (Python)
+Render SDK usage (Python, **VERIFY** all names): `RenderAsync` with `.workflows.start_task(task_slug, input_data)` returns an awaitable run; awaiting raises `TaskRunError` on failure. `task_slug` is `{workflow-slug}/{task-name}`; `input_data` is a list of positional arguments. Add the SDK to `requirements.txt` in M1 once the package name is confirmed.
 
-All tasks use the Render Python SDK. **VERIFY** the install name and imports in the SDK reference (https://render.com/docs/workflows-sdk-python). Facts from the docs:
+## 5. Workflow tasks (Python, `backend/workflows/`)
+
+All tasks use the Render Python SDK. Facts from the docs:
 
 - Create the app with `Workflows(default_retry=..., default_timeout=..., default_plan=...)`. Register tasks with `@app.task`. Call `app.start()` in the entry point.
 - Every task function takes a `TaskContext` as its first argument. Chain a task with `await ctx.run(other_task, args...)`. Run children in parallel with `asyncio.gather` or `asyncio.TaskGroup` (otherwise they run one after another).
 - Retry settings are `Retry(max_retries, wait_duration_ms, backoff_scaling)`. Defaults without settings are 3 retries, 1 s wait, doubling.
 - A task slug has the form `{workflow-slug}/{task-name}`.
-- Limits: a Hobby workspace can start new compute at about 16 CPU per minute (30+ on Pro). Chained runs over the limit **fail at `ctx.run()`**. Total arguments per run are capped at 4 MB. Up to 1,000 chained runs per minute. **VERIFY** these against https://render.com/docs/workflows-limits.
+- Limits: a Hobby workspace can start new compute at about 16 CPU per minute (more on Pro). Chained runs over the limit **fail at `ctx.run()`**. Total arguments per run are capped at 4 MB. Up to 1,000 chained runs per minute. **VERIFY** against https://render.com/docs/workflows-limits.
 
-### 5.1 Granularity (this is the main performance decision)
+### 5.1 Granularity (the main performance decision)
 
-Every task run is its own instance, and each has startup time. So 150 persona calls must **not** be 150 task runs. Group calls inside a task and use `asyncio.gather` within it.
+Every task run is its own instance with its own startup time. So 150 persona calls must **not** be 150 task runs. Group calls inside a task and use `asyncio.gather` within it.
 
-Defaults in `workflows/config.py` (all adjustable without code changes elsewhere):
+Defaults in `backend/app/config.py` (adjustable by env var):
 
 | Constant | Default | Meaning |
 |---|---|---|
 | `VARIANT_BATCHES` | 4 | `write_variant_batch` runs; each writes 5 voices concurrently |
 | `COMMENTER_BATCHES_PER_POST` | 2 | `run_commenter_batch` runs per finalist; each handles 25 personas concurrently |
 | `LLM_CONCURRENCY` | 12 | semaphore inside a task for outgoing model calls |
+| `MAX_ACTIVE_RUNS` | 2 | API-side cap on simultaneous runs (section 10) |
 
-Run count for one generate run: 1 root + 4 variant batches + 6 commenter batches (3 finalists x 2) + 1 reality = **12**. A check run: 1 root + 2 commenter batches + 1 rewrite on demand = **3-4**.
+Run count for one generate run: 1 root + 4 variant batches + 6 commenter batches (3 finalists x 2) + 1 reality = **12**. A check run: 1 root + 2 commenter batches (+ 1 rewrite on demand) = **3 to 4**.
 
-Do this in M1/M2 before building anything else: time one trivial chained run to measure startup latency, and confirm the workspace plan. If 12 runs per click is too slow or hits the per-minute compute cap, lower the batch counts. Remember rehearsals use the same budget as the real demo.
+Do this first (M1, then M8): time one trivial chained run to measure startup latency, and confirm the workspace plan. If 12 runs per click is too slow or hits the per-minute compute cap, lower the batch counts. Rehearsals and **judges trying the app during judging** use the same budget as the real demo.
 
 ### 5.2 Tasks
 
@@ -248,19 +272,19 @@ Do this in M1/M2 before building anything else: time one trivial chained run to 
 1. `post_event(stage: variants)`.
 2. generate mode: `asyncio.gather` over `VARIANT_BATCHES` calls to `ctx.run(write_variant_batch, ...)`. Merge into 20 `Variant`s. Post `variants_ready`.
    check mode: build the single `Variant(post_id="draft", voice_id="user", text=req.text)`.
-3. generate mode: `filter_top3(variants)` (plain function, not a task). Post `finalists_selected`.
-4. `post_event(stage: commenting)`. For each finalist, `asyncio.gather` over `COMMENTER_BATCHES_PER_POST` calls to `ctx.run(run_commenter_batch, ...)`. Each batch posts one `comment` event per persona as that persona's result arrives.
-5. When all batches for a finalist return: compute `cringe.score(...)`, compute the `PostScore`, post `cringe_scored`.
+3. generate mode: `filter_top3(variants)` (a plain function, not a task). Post `finalists_selected`.
+4. `post_event(stage: commenting)`. For each finalist, `asyncio.gather` over `COMMENTER_BATCHES_PER_POST` calls to `ctx.run(run_commenter_batch, ...)`. Each batch posts one `comment` event per persona as it completes.
+5. When all batches for a finalist return: compute `cringe.score(...)` and the `PostScore`, post `cringe_scored`.
 6. `post_event(stage: ranking)`. Compute ranking, post `ranking_ready`.
 7. generate mode: `ctx.run(translate_reality, ...)` for the top-ranked post, post `reality_ready`.
 8. Post `run_completed`. On any unrecovered exception post `run_failed` and re-raise.
 
 **`write_variant_batch(ctx, run_id, input_text, voice_ids)`** (Mahir M2)
-Calls Claude once per voice (concurrently, bounded by `LLM_CONCURRENCY`), using the template in `voices.json`. Validates the guardrails in section 9. Returns `list[Variant]`. Retries a voice once on a guardrail failure with a stricter instruction before giving up on that voice.
+Calls Claude once per voice (concurrently, bounded by `LLM_CONCURRENCY`), using the template in `voices.json`. Validates the guardrails in section 9. Returns `list[Variant]`. Retries a voice once on a guardrail failure with a stricter instruction before dropping that voice.
 
 **`run_commenter_batch(ctx, run_id, post, persona_ids, batch_id)`** (Ishan I2)
-1. If this run has the demo switch on and this is the designated batch (see section 6), claim the failure and raise.
-2. For each persona, concurrently, call the commenter provider. Validate the strict JSON schema in section 10. On invalid JSON retry once with a "return only JSON" reminder; on a second failure record `action: "ignore"`, `appeal: 3`, `cringe_flag: false` and log a warning.
+1. If this run has the demo switch on and this is the designated batch (section 6), claim the failure and raise.
+2. For each persona, concurrently, call the commenter provider. Validate the strict JSON schema in section 11. On invalid JSON retry once with a "return only JSON" reminder; on a second failure record `action: "ignore"`, `appeal: 3`, `cringe_flag: false` and log a warning.
 3. Post a `comment` event per persona as soon as it is done.
 4. Return `list[CommentResult]`.
 
@@ -268,7 +292,7 @@ Calls Claude once per voice (concurrently, bounded by `LLM_CONCURRENCY`), using 
 One Claude call returning `{translation, inflations}` JSON. Returns `Reality`.
 
 **`run_tone_down(ctx, run_id, draft, cringe_result)`** (Ishan I4)
-Root task for check mode. One Claude call that rewrites the draft to remove the triggered features while keeping the facts. Re-score the rewrite with `cringe.score` (rule part only, so it is fast and repeatable). Post `rewrite_ready`.
+Root task for check mode. One Claude call that rewrites the draft to remove the triggered features while keeping the facts. Re-score the rewrite with the rule part only (fast, repeatable). Post `rewrite_ready`.
 
 ## 6. Retry and the demo failure switch
 
@@ -281,15 +305,15 @@ Durability story for the Render judges:
 
 **Failure switch.** When `RunRequest.demo_fail` is true:
 
-1. The web UI shows a "Demo mode: simulated failure" badge. It is labelled honestly; do not hide it.
+1. The UI shows a "Demo mode: simulated failure" badge. It is labelled honestly; do not hide it.
 2. `run_pipeline` designates the **first** commenter batch of the **first** finalist as the failing batch (`batch_id` like `v07-b1`).
-3. At the start of that batch, the task calls `POST /api/runs/:id/demo-fail-claim`. The web service answers `{fail: true}` exactly once per run. If true, the task posts `demo_failure_triggered`, then raises `RuntimeError("simulated failure (demo mode)")`.
+3. At the start of that batch, the task calls `POST /internal/runs/{id}/demo-fail-claim`. The API answers `{fail: true}` exactly once per run. If true, the task posts `demo_failure_triggered`, then raises `RuntimeError("simulated failure (demo mode)")`.
 4. Render retries the batch. The second attempt claims again, gets `{fail: false}`, and runs normally.
 5. The UI shows "Retried 1 task automatically" using `retries_seen`, and the Render dashboard shows the failed attempt followed by a successful one.
 
-This does not rely on knowing the attempt number inside the SDK. The web service is the single source of truth for "have we failed yet".
+This does not rely on knowing the attempt number inside the SDK. The API is the single source of truth for "have we failed yet".
 
-## 7. Cringe score (Ishan I3, in `workflows/cringe/`)
+## 7. Cringe score (Ishan I3, `backend/cringe/`)
 
 Public interface (M1 creates a stub with these signatures so imports work from day one):
 
@@ -317,7 +341,7 @@ Rule features (case-insensitive; lexicons in `data/cringe_lexicon.json`). Points
 
 Blend: if there are no comments yet, `score = rule_score`. Otherwise `llm_score = 100 x (share of commenters with cringe_flag)` and `score = 0.6 x rule_score + 0.4 x llm_score`. `reasons` is the triggered features sorted by points, max 5. Unit tests cover each feature and the blend, and a set of 10 known-cringe vs 10 plain posts must separate (I7).
 
-## 8. Ranking (Mahir M3, client copy in `web/lib/rank.ts`)
+## 8. Ranking (Mahir M3; Python in `backend/workflows/tasks/pipeline.py`, client copy in `frontend/lib/rank.ts`)
 
 ```
 engagement_rate = (likes + comments) / persona_count          # 0..1
@@ -328,18 +352,32 @@ final_score(w)  = base_score - w x cringe.score               # w = tone weight,
 ```
 
 - The server computes `ranking` with `w = 0.5`.
-- The tone slider (0 to 1) re-ranks **in the browser only** using `rank.ts` over the same numbers, so it needs no model call and behaves identically every time. Python and TypeScript implementations must agree, and a shared sample (`data/samples/ranking_case.json`) is used by one test in each language.
+- The tone slider (0 to 1) re-ranks **in the browser only** using `rank.ts` over the same numbers, so it needs no model call and behaves identically every time. The Python and TypeScript implementations must agree; one test in each language reads the shared `data/samples/ranking_case.json`.
 - `filter_top3`: sort the 20 variants by `hype_score` descending and take the top 3 with **distinct** `voice_id`s.
 
-## 9. Content guardrails in code
+## 9. Content and input guardrails in code
 
-- Variant prompts say: use only facts from the input sentence; exaggerate tone and framing, never facts; do not add employers, job titles, schools, numbers, names of people, or companies.
-- After generation, validate: any digit sequence in the output that is not in the input (other than list markers 1 to 5) fails the variant. Capitalised multi-word names that are not in the input also fail. A failed variant is retried once with a stricter prompt.
-- Persona names are fictional and generic. No real public figures anywhere in prompts, data or UI.
-- The UI uses its own name ("Thought Leadr"), its own colours, and its own icons. Never use LinkedIn's logo, name in the header, or exact colours.
-- The UI never shows a number as a forecast of real engagement. Counts are labelled "simulated audience".
+- **Input limits:** generate text 1 to 280 characters, check text 1 to 3000. Reject empty, whitespace-only and control characters. Strip and normalise whitespace.
+- **User text is data, not instructions.** Wrap it in delimiters in every prompt (for example `<user_text>...</user_text>`), tell the model to treat it as content to rewrite and never as instructions, and never place it in a system prompt. A persona or variant answer that echoes system-prompt text is treated as invalid.
+- **Offensive input.** Prompts instruct the model to decline hateful, harassing or sexual content by returning a short neutral post about "a quiet day at work". A small blocklist in `guard.py` rejects obviously abusive input with `invalid_input` before any model call. This runs on a public demo URL, so assume someone will try.
+- **Tone, not facts.** Variant prompts say: use only facts from the input; exaggerate tone and framing, never facts; do not add employers, job titles, schools, numbers, names of people, or companies.
+- **Post-validation.** Any digit sequence in the output that is not in the input (other than list markers 1 to 5) fails the variant. Capitalised multi-word names that are not in the input also fail. A failed variant is retried once with a stricter prompt.
+- **Fictional audience.** Persona names are fictional and generic. No real public figures anywhere in prompts, data or UI.
+- **Own branding.** The UI uses its own name ("Thought Leadr"), colours and icons. Never use LinkedIn's logo, name, or exact colours.
+- **No forecasts.** The UI never shows a number as a forecast of real engagement. Counts are labelled "simulated audience".
+- **Plain text only** in the UI; never `dangerouslySetInnerHTML`.
 
-## 10. Personas and commenter contract (Ishan I1/I2)
+## 10. Abuse and load protection (Mahir M9, `backend/app/guard.py`)
+
+The deployed API will be public and judges may try it during judging, while real model and Render budget is limited.
+
+- `MAX_ACTIVE_RUNS` (default 2): if exceeded, `POST /api/runs` returns 429 `busy` with the message "Both demo slots are busy, try again in a few seconds", and the UI shows it nicely.
+- Per-IP limit: at most 1 new run per 10 seconds and 20 per hour. (Behind Render's proxy, read the client IP from `X-Forwarded-For`.)
+- A global cap `MAX_RUNS_PER_HOUR` (default 60) protects model credits.
+- Input limits and blocklist from section 9.
+- Demo mode (`demo_fail`) is allowed from any client; it only affects the caller's own run.
+
+## 11. Personas and commenter contract (Ishan I1/I2)
 
 `data/personas.json` is an array of 50 objects:
 
@@ -360,7 +398,7 @@ final_score(w)  = base_score - w x cringe.score               # w = tone weight,
 
 10 archetypes, 5 variations each: `recruiter`, `agree_guy` (engagement farmer), `ai_pivot_bro` (was crypto, now AI), `great_post_bot`, `skeptical_senior_eng`, `laid_off_job_seeker`, `hustle_founder`, `hr_people_ops`, `quiet_lurker`, `corporate_comms_exec`. Variations differ in industry, seniority, mood and tolerance for hype.
 
-Commenter prompt: system message sets the persona and says "react as this person would scrolling their feed; be brief; no real people". User message has the post. The model must return **only** this JSON:
+Commenter prompt: the system message sets the persona and says "react as this person would scrolling their feed; be brief; no real people". The user message has the post inside delimiters. The model must return **only** this JSON:
 
 ```json
 { "action": "like|comment|ignore|report", "comment": "string or null", "appeal": 1, "cringe_flag": false }
@@ -368,68 +406,75 @@ Commenter prompt: system message sets the persona and says "react as this person
 
 Rules: `comment` is non-null only when `action` is `comment` (max 140 chars). `appeal` is an integer 1 to 5. `cringe_flag` is true if the persona would roll their eyes. Validate with Pydantic. Use `temperature` around 0.8 so personas vary.
 
-## 11. Models and providers
+## 12. Models and providers
 
 | Use | Provider | Env var for model | Notes |
 |---|---|---|---|
 | Post variants, reality translation, tone-down rewrite | Anthropic | `CLAUDE_MODEL` (default `claude-haiku-5-5`) | Fast, structured. Raise to `claude-sonnet-5-5` if variant quality is poor and latency allows. |
-| Commenter personas | Featherless AI (OpenAI-compatible) | `FEATHERLESS_MODEL` | Pick a small instruct model. **VERIFY** the base URL (`FEATHERLESS_BASE_URL`, expected `https://api.featherless.ai/v1`) and model id in the Featherless dashboard. |
+| Commenter personas | Featherless AI (OpenAI-compatible) | `FEATHERLESS_MODEL` | Pick a small instruct model. **VERIFY** the base URL (`FEATHERLESS_BASE_URL`, expected `https://api.featherless.ai/v1`) and model id in the Featherless dashboard. Participants get a free month through the event's participant setup guide / promo code. |
 
 **Risk: Featherless concurrency.** Featherless limits concurrent requests by plan. 50+ calls in parallel may queue or fail. Mitigations: the `LLM_CONCURRENCY` semaphore, backoff on 429, and a switch `COMMENTER_PROVIDER=featherless|anthropic` that sends the same commenter prompts to Claude instead. Test Featherless concurrency in the first hour (I2) and switch if it is too slow. The demo does not depend on which provider answers.
 
 Call budget per generate run: 20 variants + 150 commenters + 1 reality = about 171 model calls. Per check run: 50 commenters + optional 1 rewrite.
 
-## 12. Environment variables
+## 13. Environment variables
 
-`web/` (Render web service):
+`frontend/` (Render web service; build-time, `NEXT_PUBLIC_*` are public):
 
 | Var | Purpose |
 |---|---|
-| `RENDER_API_KEY` | lets `@renderinc/sdk` start task runs (**VERIFY** where to create it) |
-| `RENDER_WORKFLOW_SLUG` | the workflow service slug, used to build `{slug}/run_pipeline` |
-| `WORKFLOW_EVENT_SECRET` | shared secret for the internal endpoints |
+| `NEXT_PUBLIC_API_URL` | public URL of the FastAPI service (local: `http://localhost:8000`) |
+| `NEXT_PUBLIC_USE_SAMPLES` | `true` renders from `data/samples` copies without a backend (UI development) |
 | `NEXT_PUBLIC_RENDER_DASHBOARD_URL` | link shown in the UI for the demo |
-| `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` | stretch (I8) |
-| `SENTRY_DSN` | stretch (I8) |
+| `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` | stretch (I9) |
 
-`workflows/` (Render workflow service):
+`backend/` API service and workflow service (both read `backend/app/config.py`):
 
-| Var | Purpose |
-|---|---|
-| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | Claude |
-| `FEATHERLESS_API_KEY`, `FEATHERLESS_BASE_URL`, `FEATHERLESS_MODEL` | Featherless |
-| `COMMENTER_PROVIDER` | `featherless` (default) or `anthropic` |
-| `WEB_BASE_URL` | public URL of the web service, e.g. `https://thought-leadr.onrender.com` |
-| `WORKFLOW_EVENT_SECRET` | same value as the web service |
-| `VARIANT_BATCHES`, `COMMENTER_BATCHES_PER_POST`, `LLM_CONCURRENCY` | optional overrides for section 5.1 |
-| `SENTRY_DSN` | stretch (I8) |
+| Var | Used by | Purpose |
+|---|---|---|
+| `RENDER_API_KEY` | API | lets the Render SDK start task runs (**VERIFY** where to create it) |
+| `RENDER_WORKFLOW_SLUG` | API | the workflow service slug, used to build `{slug}/run_pipeline` |
+| `WORKFLOW_EVENT_SECRET` | both | shared secret for the internal endpoints |
+| `CORS_ORIGINS` | API | comma-separated allowed origins (the frontend URL) |
+| `WEB_BASE_URL` | workflow | public URL of the API, e.g. `https://thought-leadr-api.onrender.com` |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | workflow | Claude |
+| `FEATHERLESS_API_KEY`, `FEATHERLESS_BASE_URL`, `FEATHERLESS_MODEL` | workflow | Featherless |
+| `COMMENTER_PROVIDER` | workflow | `featherless` (default) or `anthropic` |
+| `VARIANT_BATCHES`, `COMMENTER_BATCHES_PER_POST`, `LLM_CONCURRENCY` | workflow | optional overrides for section 5.1 |
+| `MAX_ACTIVE_RUNS`, `MAX_RUNS_PER_HOUR` | API | abuse guard (section 10) |
+| `SENTRY_DSN` | both | stretch (I9) |
 
-Rules: secrets live only in Render environment settings and local `.env` files. `.env*` is in `.gitignore`. Commit `.env.example` files with names only.
+Rules: secrets live only in Render environment settings and local `.env` files. `.env*` is git-ignored except `.env.example`.
 
-## 13. Deployment on Render (Mahir M1)
+## 14. Deployment on Render (Mahir M1)
 
-1. **Web service.** Root directory `web`, build `npm install && npm run build`, start `npm run start`. Use an always-on instance (or ping it before the demo) so there is no cold start.
-2. **Workflow service.** Create it in the dashboard (Workflows are not replicated by Blueprints, per the docs, so do not rely on `render.yaml` for this). Root directory `workflows`, build `pip install -r requirements.txt`, start `python main.py`. **VERIFY** the exact commands and how the task slug is shown.
-3. Set env vars on both (section 12). Set `WEB_BASE_URL` on the workflow service to the web service's public URL.
-4. Deploy the minimal pipeline first (M1): `run_pipeline` posts a `run_started` and `run_completed` event. Confirm the round trip from the browser before building anything else.
-5. Auto-deploy from `main` on both services. Because of this, **never push a broken `main`** (see `agents.md`).
+1. **Frontend web service.** Root directory `frontend`, build `npm install && npm run build`, start `npm run start`. Set `NEXT_PUBLIC_API_URL` to the API's URL **before** building (it is baked in at build time).
+2. **API web service.** Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`. Set the Python version to 3.11 (an env var or a `.python-version` file; **VERIFY**). Health check path `/health`.
+3. **Workflow service.** Create it in the dashboard (Workflows are not replicated by Blueprints, per the docs, so do not rely on `render.yaml` for this). Root directory `backend`, build `pip install -r requirements.txt`, start command **VERIFY**. Set env vars (section 13).
+4. Use always-on instances for the API and frontend (or ping them before the demo), so there is no cold start while presenting.
+5. Deploy the minimal round trip first: `POST /api/runs` starts `run_pipeline`, which posts `run_started` and `run_completed`; the browser sees the run complete. Confirm this before building anything else.
+6. Auto-deploy from `main`. Because of this, **never push a broken `main`** (see `agents.md`).
+7. Record the three service URLs and the dashboard link in the README before the demo.
 
-## 14. Errors, logging, observability
+## 15. Errors, logging, observability
 
-- Python: `logging` at INFO with `run_id` in every line. Never log full model outputs at INFO, only counts and ids.
-- Web: log each internal endpoint call with `run_id` and event `type`.
+- Python: `logging` at INFO with `run_id` in every line. Never log full model outputs or post text at INFO, only counts and ids.
+- API: log each internal endpoint call with `run_id` and event `type`.
 - Every model call has a timeout (20 s) and one retry for transient errors.
-- UI states for: queued, running (with stage label), failed (message and a "Try again" button), and a 120 s overall timeout.
-- Stretch (I8): PostHog events `run_started`, `run_completed`, `reality_toggled`, `tone_changed`, `draft_checked`. Sentry in both services. Scrub post text from Sentry payloads.
+- UI states for: queued, running (with a stage label), failed (message and a "Try again" button), busy (429 message), and a 120 s overall timeout.
+- Stretch (I9): PostHog events `run_started`, `run_completed`, `reality_toggled`, `tone_changed`, `draft_checked`. Sentry in both services. Scrub post text from Sentry payloads.
 
-## 15. Risks and mitigations
+## 16. Risks and mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Task startup latency or per-minute compute cap on Hobby | Run takes too long, chained runs fail | Measure in the first hour. Reduce `*_BATCHES`. Ask Render staff about credits or a higher plan at the event. |
+| Judges or attendees spam the public app during judging | Budget and Render limits exhausted before your slot | Abuse guard (section 10), busy message, keep the URL out of public channels until your slot |
 | Featherless concurrency limits | Commenters slow or 429 | Semaphore plus `COMMENTER_PROVIDER=anthropic` fallback |
 | Model returns invalid JSON | Missing comments | Pydantic validation, one reminder retry, then default result |
-| Web service restarts mid-demo | In-memory runs lost | Single instance, always-on plan, no deploys during the demo window |
+| Prompt injection or offensive input on a public demo | Embarrassing output on stage | Delimited user text, blocklist, invalid-answer checks (section 9) |
+| API restarts mid-demo | In-memory runs lost | One instance, always-on plan, no deploys during the demo window |
 | Retried task duplicates events | Double comments | Idempotent `event_id` |
 | Guardrail miss: invented facts in a post | Credibility, safety | Post-validation in code (section 9), reviewed during rehearsal |
-| Render SDK differs from my notes | Blocked early | The M1 round-trip test comes first; adjust this file with what you learn |
+| CORS or `NEXT_PUBLIC_API_URL` misconfigured after deploy | Frontend cannot reach the API | M1 round-trip test on the deployed URLs before building features |
+| Render SDK differs from these notes | Blocked early | The M1 round-trip test comes first; update this file with what you learn |

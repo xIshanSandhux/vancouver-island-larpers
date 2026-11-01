@@ -1,0 +1,20 @@
+# env and secrets
+.env
+.env.*
+!.env.example
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# node / next
+node_modules/
+.next/
+out/
+frontend/.next/
+
+# misc
+.DS_Store
+*.log
